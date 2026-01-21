@@ -17,10 +17,10 @@
 Repository:     github.com/GetStream/Vision-Agents
 Language:       Python 3.10+
 License:        Apache 2.0 (상업용 완전 허용)
-Latest Version: v0.3.0 (2026년 1월 21일)
-Community:      ⭐ 3,800+ stars | 🔀 319 forks | 👥 15 contributors
-Activity:       매우 활발 (14시간 전 업데이트)
-Commit History: 25개 릴리스, 정기적 업데이트
+Latest Version: v0.2.6 (2024년 12월 16일)
+Community:      ⭐ 3,500+ stars | 🔀 283 forks
+Activity:       매우 활발 (정기적 업데이트)
+Commit History: 30+ 릴리스, 정기적 업데이트
 ```
 
 ***
