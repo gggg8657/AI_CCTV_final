@@ -112,6 +112,8 @@ class LLMManager:
             self.config = DEFAULT_CONFIG.copy()
             self.mode = "local"  # "local" or "api"
             self.api_config = {}  # API 모드 설정
+            self.text_model_name = None  # API 모드에서 사용할 모델 이름
+            self.vision_model_name = None  # API 모드에서 사용할 모델 이름
             
             # 외부 config에서 모델 경로 및 모드 업데이트
             config_to_use = config or getattr(self, '_pending_config', None)
@@ -148,6 +150,11 @@ class LLMManager:
             # API 모드 설정
             if "api" in llm_config:
                 self.api_config = llm_config["api"]
+                # API 모드에서 모델 이름 설정
+                if "text_model" in self.api_config:
+                    self.text_model_name = self.api_config["text_model"]
+                if "vision_model" in self.api_config:
+                    self.vision_model_name = self.api_config["vision_model"]
         if "gpu" in config and "device_id" in config["gpu"]:
             self.config["MAIN_GPU"] = config["gpu"]["device_id"]
     
@@ -173,10 +180,11 @@ class LLMManager:
                     base_url=base_url,
                     api_key=api_key
                 )
-                # API 모드에서는 모델 이름 저장
-                self.vision_model_name = self.api_config.get("vision_model", "Qwen/Qwen2.5-VL-7B")
+                # API 모드에서는 모델 이름 저장 (이미 설정되어 있으면 유지)
+                if not self.vision_model_name:
+                    self.vision_model_name = self.api_config.get("vision_model", "Qwen/Qwen2.5-VL-7B")
                 self.vision_loaded = True
-                logging.info(f"Vision LLM API 연결 완료: {base_url}")
+                logging.info(f"Vision LLM API 연결 완료: {base_url} (model: {self.vision_model_name})")
                 return True
             else:
                 # Local 모드: llama.cpp 사용
@@ -229,10 +237,11 @@ class LLMManager:
                     base_url=base_url,
                     api_key=api_key
                 )
-                # API 모드에서는 모델 이름 저장
-                self.text_model_name = self.api_config.get("text_model", "Qwen/Qwen3-8B")
+                # API 모드에서는 모델 이름 저장 (이미 설정되어 있으면 유지)
+                if not self.text_model_name:
+                    self.text_model_name = self.api_config.get("text_model", "Qwen/Qwen3-8B")
                 self.text_loaded = True
-                logging.info(f"Text LLM API 연결 완료: {base_url}")
+                logging.info(f"Text LLM API 연결 완료: {base_url} (model: {self.text_model_name})")
                 return True
             else:
                 # Local 모드: llama.cpp 사용
