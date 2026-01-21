@@ -6,6 +6,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from ..function_calling import FunctionRegistry, register_core_functions
+from ..llm_wrapper import create_chat_completion_with_tools
 
 
 class FunctionCallingSupport:
@@ -64,7 +65,9 @@ class FunctionCallingSupport:
         messages.append({"role": "user", "content": query})
 
         try:
-            response = self.llm_manager.text_llm.create_chat_completion(
+            # Function Calling 지원 래퍼 사용
+            response = create_chat_completion_with_tools(
+                self.llm_manager.text_llm,
                 messages=messages,
                 tools=self.registry.list_functions(),
                 tool_choice="auto",
@@ -72,6 +75,7 @@ class FunctionCallingSupport:
                 max_tokens=512,
             )
         except Exception as exc:
+            # Fallback: tools 없이 일반 호출
             fallback = self.llm_manager.text_llm.create_chat_completion(
                 messages=messages,
                 temperature=0.2,
@@ -131,6 +135,7 @@ class FunctionCallingSupport:
                 )
 
             try:
+                # Function Calling 결과를 바탕으로 최종 응답 생성
                 follow_up = self.llm_manager.text_llm.create_chat_completion(
                     messages=messages,
                     temperature=0.2,
