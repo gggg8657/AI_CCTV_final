@@ -94,9 +94,13 @@ class LLMManager:
     _instance = None
     _initialized = False
     
-    def __new__(cls):
+    def __new__(cls, config: Dict = None):
         if cls._instance is None:
             cls._instance = super(LLMManager, cls).__new__(cls)
+            cls._instance._pending_config = config
+        elif config:
+            # 이미 인스턴스가 있으면 config 업데이트
+            cls._instance._update_config(config)
         return cls._instance
     
     def __init__(self, config: Dict = None):
@@ -110,35 +114,42 @@ class LLMManager:
             self.api_config = {}  # API 모드 설정
             
             # 외부 config에서 모델 경로 및 모드 업데이트
-            if config:
-                if "llm" in config:
-                    llm_config = config["llm"]
-                    # 모드 설정
-                    if "mode" in llm_config:
-                        self.mode = llm_config["mode"]
-                    
-                    # Local 모드 설정
-                    if "text_model_path" in llm_config:
-                        self.config["TEXT_MODEL_PATH"] = llm_config["text_model_path"]
-                    if "vision_model_path" in llm_config:
-                        self.config["VISION_MODEL_PATH"] = llm_config["vision_model_path"]
-                    if "vision_mmproj_path" in llm_config:
-                        self.config["MM_PROJ_PATH"] = llm_config["vision_mmproj_path"]
-                    if "n_gpu_layers" in llm_config:
-                        self.config["N_GPU_LAYERS"] = llm_config["n_gpu_layers"]
-                    if "n_ctx" in llm_config:
-                        self.config["N_CTX"] = llm_config["n_ctx"]
-                    if "n_threads" in llm_config:
-                        self.config["N_THREADS"] = llm_config["n_threads"]
-                    if "n_batch" in llm_config:
-                        self.config["N_BATCH"] = llm_config["n_batch"]
-                    
-                    # API 모드 설정
-                    if "api" in llm_config:
-                        self.api_config = llm_config["api"]
-                if "gpu" in config and "device_id" in config["gpu"]:
-                    self.config["MAIN_GPU"] = config["gpu"]["device_id"]
+            config_to_use = config or getattr(self, '_pending_config', None)
+            if config_to_use:
+                self._update_config(config_to_use)
+                self._pending_config = None
+            
             LLMManager._initialized = True
+    
+    def _update_config(self, config: Dict):
+        """Config 업데이트 (이미 초기화된 경우)"""
+        if "llm" in config:
+            llm_config = config["llm"]
+            # 모드 설정
+            if "mode" in llm_config:
+                self.mode = llm_config["mode"]
+            
+            # Local 모드 설정
+            if "text_model_path" in llm_config:
+                self.config["TEXT_MODEL_PATH"] = llm_config["text_model_path"]
+            if "vision_model_path" in llm_config:
+                self.config["VISION_MODEL_PATH"] = llm_config["vision_model_path"]
+            if "vision_mmproj_path" in llm_config:
+                self.config["MM_PROJ_PATH"] = llm_config["vision_mmproj_path"]
+            if "n_gpu_layers" in llm_config:
+                self.config["N_GPU_LAYERS"] = llm_config["n_gpu_layers"]
+            if "n_ctx" in llm_config:
+                self.config["N_CTX"] = llm_config["n_ctx"]
+            if "n_threads" in llm_config:
+                self.config["N_THREADS"] = llm_config["n_threads"]
+            if "n_batch" in llm_config:
+                self.config["N_BATCH"] = llm_config["n_batch"]
+            
+            # API 모드 설정
+            if "api" in llm_config:
+                self.api_config = llm_config["api"]
+        if "gpu" in config and "device_id" in config["gpu"]:
+            self.config["MAIN_GPU"] = config["gpu"]["device_id"]
     
     def load_vision_llm(self, gpu_id: int = None) -> bool:
         """Vision LLM 로드"""
