@@ -119,6 +119,17 @@ class FunctionCallingSupport:
                 "warning": f"Tool calling unavailable: {exc}",
             }
 
+        # 응답 검증
+        if not response.get("choices") or not response["choices"][0].get("message"):
+            logging.error("Invalid response format from LLM")
+            return {
+                "success": False,
+                "error": "Invalid response format",
+                "response": "",
+                "tool_calls": [],
+                "tool_results": [],
+            }
+        
         message = response["choices"][0]["message"]
         tool_calls = message.get("tool_calls")
         if not tool_calls and message.get("function_call"):
@@ -138,12 +149,18 @@ class FunctionCallingSupport:
             for index, tool_call in enumerate(tool_calls):
                 function_call = tool_call.get("function", {})
                 name = function_call.get("name")
+                
+                if not name:
+                    logging.warning(f"Tool call {index} missing function name, skipping")
+                    continue
+                
                 raw_args = function_call.get("arguments")
                 parsed_args = self._parse_arguments(raw_args)
 
                 try:
                     result = self.registry.call(name, parsed_args)
                 except Exception as exc:
+                    logging.error(f"Function call failed for {name}: {exc}")
                     result = {"ok": False, "error": str(exc)}
 
                 tool_results.append(
@@ -216,6 +233,9 @@ class FunctionCallingSupport:
                 return {}
             try:
                 return json.loads(raw_args)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                # JSON 파싱 에러 로깅 (길이 제한)
+                arg_preview = raw_args[:200] if len(raw_args) > 200 else raw_args
+                logging.warning(f"Failed to parse tool arguments as JSON: {e}. Args preview: {arg_preview}")
                 return {}
         return {}

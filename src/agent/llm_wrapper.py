@@ -52,11 +52,24 @@ def create_chat_completion_with_tools(
                     messages=messages,
                     **kwargs
                 )
+            
+            # 응답 검증
+            if not response.choices or not response.choices[0].message:
+                logging.error("API returned empty response")
+                return {
+                    "choices": [{
+                        "message": {
+                            "content": "Error: Empty response from API",
+                            "tool_calls": []
+                        }
+                    }]
+                }
+            
             # OpenAI 응답을 dict 형식으로 변환
             return {
                 "choices": [{
                     "message": {
-                        "content": response.choices[0].message.content,
+                        "content": response.choices[0].message.content or "",
                         "tool_calls": [
                             {
                                 "id": tc.id,
@@ -74,28 +87,49 @@ def create_chat_completion_with_tools(
         except Exception as e:
             # API 호출 실패 시 fallback
             logging.warning(f"API 호출 실패, fallback: {e}")
-            if tools:
-                # tools 정보를 메시지에 포함
-                tools_desc = "\n".join([
-                    f"- {tool['function']['name']}: {tool['function']['description']}"
-                    for tool in tools
-                ])
-                messages.insert(0, {
-                    "role": "system",
-                    "content": f"Available tools:\n{tools_desc}"
-                })
-            response = llm.chat.completions.create(
-                model=model_name or "Qwen/Qwen3-8B",
-                messages=messages,
-                **kwargs
-            )
-            return {
-                "choices": [{
-                    "message": {
-                        "content": response.choices[0].message.content
+            try:
+                # messages 복사본 사용 (원본 변경 방지)
+                fallback_messages = [msg.copy() if isinstance(msg, dict) else msg for msg in messages]
+                if tools:
+                    # tools 정보를 메시지에 포함
+                    tools_desc = "\n".join([
+                        f"- {tool['function']['name']}: {tool['function']['description']}"
+                        for tool in tools
+                    ])
+                    fallback_messages.insert(0, {
+                        "role": "system",
+                        "content": f"Available tools:\n{tools_desc}"
+                    })
+                response = llm.chat.completions.create(
+                    model=model_name or "Qwen/Qwen3-8B",
+                    messages=fallback_messages,
+                    **kwargs
+                )
+                if not response.choices or not response.choices[0].message:
+                    logging.error("Fallback API call returned empty response")
+                    return {
+                        "choices": [{
+                            "message": {
+                                "content": "Error: Empty response from fallback API call"
+                            }
+                        }]
                     }
-                }]
-            }
+                return {
+                    "choices": [{
+                        "message": {
+                            "content": response.choices[0].message.content or ""
+                        }
+                    }]
+                }
+            except Exception as fallback_error:
+                logging.error(f"Fallback API call also failed: {fallback_error}")
+                return {
+                    "choices": [{
+                        "message": {
+                            "content": f"Error: API call failed: {str(e)}"
+                        }
+                    }]
+                }
     else:
         # Local 모드: llama.cpp 사용
         # tools가 없으면 일반 호출
@@ -118,10 +152,12 @@ def create_chat_completion_with_tools(
             # tools 파라미터를 지원하지 않는 경우
             # 메시지에 tools 정보를 포함시켜서 처리
             # 이는 fallback 방식이며, 실제로는 llama.cpp가 tools를 지원해야 함
+            # messages 복사본 사용 (원본 변경 방지)
+            fallback_messages = [msg.copy() if isinstance(msg, dict) else msg for msg in messages]
             system_message = None
-            for i, msg in enumerate(messages):
+            for i, msg in enumerate(fallback_messages):
                 if msg.get("role") == "system":
-                    system_message = messages.pop(i)
+                    system_message = fallback_messages.pop(i)
                     break
             
             # System 메시지에 tools 정보 추가
@@ -132,16 +168,16 @@ def create_chat_completion_with_tools(
                 ])
                 system_content = system_message.get("content", "")
                 system_message["content"] = f"{system_content}\n\nAvailable tools:\n{tools_desc}"
-                messages.insert(0, system_message)
+                fallback_messages.insert(0, system_message)
             else:
                 tools_desc = "\n".join([
                     f"- {tool['function']['name']}: {tool['function']['description']}"
                     for tool in tools
                 ])
-                messages.insert(0, {
+                fallback_messages.insert(0, {
                     "role": "system",
                     "content": f"Available tools:\n{tools_desc}"
                 })
             
             # 일반 호출 (LLM이 tools를 자연어로 이해)
-            return llm.create_chat_completion(messages=messages, **kwargs)
+            return llm.create_chat_completion(messages=fallback_messages, **kwargs)
