@@ -15,6 +15,13 @@ from .events import (
     PackageDisappearedEvent,
     TheftDetectedEvent,
 )
+from .event_handlers import (
+    BaseEventHandler,
+    VADEventHandler,
+    VLMEventHandler,
+    AgentEventHandler,
+    HandlerStats,
+)
 
 
 
