@@ -90,3 +90,137 @@ EXCEPTIONS
 - 임시 파일이나 테스트 파일
 - 사용자가 명시적으로 "커밋하지 마" 요청 시
 - 작업이 아직 완료되지 않은 경우 (Draft 상태)
+
+━━━━━━━━━━━━━━━━━━━━
+PERPLEXITY MCP RULES
+━━━━━━━━━━━━━━━━━━━━
+
+Perplexity MCP를 사용할 때:
+1. Perplexity 검색 결과는 요약하지 말고 **원본 응답 전체를 그대로 대화창에 표시**해야 함
+2. 사용자가 검색 결과를 직접 확인할 수 있도록 원문을 보존
+3. 검색 결과를 기반으로 한 분석이나 요약은 별도로 제공하되, 원본 결과는 반드시 포함
+
+예시:
+- ❌ 잘못된 방식: "Perplexity 검색 결과를 확인했습니다. 버전은 v0.2.6입니다."
+- ✅ 올바른 방식: Perplexity 검색 결과 전체를 표시한 후, 필요시 추가 분석 제공
+
+━━━━━━━━━━━━━━━━━━━━
+CONDA + CODEX CLI + PERPLEXITY MCP RULES
+━━━━━━━━━━━━━━━━━━━━
+
+Always respond in Korean
+
+## 0) Purpose
+- Repo별 Conda 환경이 다른 상황에서도, 실행/재현/검증이 가능한 개발/연구 워크플로우를 강제한다.
+- 코딩 작업은 Codex CLI를 "초안 생성기"로 사용하고, 본 에이전트(Cursor)는 최종 품질과 재현성(테스트/스모크)을 보장한다.
+- 조사/팩트체크/최신 확인은 Perplexity MCP를 사용하며, 출처 기반으로만 결론을 내린다.
+- 모든 답변은 실행 가능한 다음 액션(I propose...)를 포함한다.
+
+---
+
+## 1) Repo별 Conda Environment 규약 (강제)
+### 1.1 Single Source of Truth(SSOT)
+각 레포는 다음 중 최소 1개를 반드시 갖는다. 우선순위는 아래와 같다:
+1) `environment.yml` (권장, 재현성 최우선)
+2) `ENVIRONMENT.md` (설명/실행/검증 커맨드 문서)
+3) (선택) `requirements.txt`/`pyproject.toml`/`conda-lock.yml` 등 보조
+
+### 1.2 ENVIRONMENT.md 최소 템플릿(레포 루트)
+`ENVIRONMENT.md`가 없다면, 코드 작업 전에 이를 먼저 추가하도록 제안한다.
+
+- ENV_NAME: <conda env name>
+- PYTHON: <version>
+- CUDA: <version or "cpu">
+- CREATE:
+  - `conda env create -f environment.yml` (권장)
+  - or `conda create -n <ENV_NAME> python=<ver>`
+- ACTIVATE:
+  - `conda activate <ENV_NAME>`
+- VERIFY (최소 2개):
+  - `python -V`
+  - `python -c "import torch; print(torch.__version__, torch.cuda.is_available())"` (torch 사용 시)
+- RUN (대표 1~3개):
+  - 예) `python train.py ...`
+  - 예) `python demo.py ...`
+- TEST/SMOKE (최소 1개):
+  - 예) `pytest -q`
+  - 예) `python -m compileall .`
+- NOTES:
+  - GPU/드라이버/특이 사항, 데이터 경로, 권한 이슈
+
+### 1.3 작업 시작 Preflight(필수)
+개발/실험/디버깅에 착수하기 전에, 아래 체크를 항상 수행한다:
+- [ ] 레포 루트 기준 작업인지 확인(경로 명시)
+- [ ] Conda env 활성화 명시: `conda activate <ENV_NAME>`
+- [ ] VERIFY 커맨드 최소 2개 확보 및 실행 가능 상태 확인
+- [ ] 재현 커맨드(에러 재현/실험 실행) 최소 1개 확보
+- [ ] 변경 후 검증 커맨드(TEST/SMOKE) 최소 1개 확보
+
+Preflight 정보가 없으면:
+- 에이전트는 먼저 필요한 정보를 "확보하는 액션"을 제안하고, 무리한 추측으로 진행하지 않는다.
+
+### 1.4 Env 매핑(개인 워크스페이스 권장 규약)
+(권장) 상위 디렉토리에 `REPO_ENVS.md`를 유지한다.
+- repo_path → env_name → python/cuda → run/test → notes
+
+에이전트는 레포가 바뀌면 항상 env 매핑을 확인/갱신하도록 제안한다.
+
+---
+
+## 2) Codex CLI 협업 규약 (코딩/개발 작업)
+### 2.1 Codex는 "패치 생성기", Cursor는 "검수자"
+- Codex의 출력은 기본적으로 unified diff(패치) 형태를 요구한다.
+- Cursor는 패치를 적용하기 전후로 재현/검증 커맨드를 제시하고, 리스크를 평가한다.
+
+### 2.2 Codex 입력 프롬프트 표준(구조화 강제)
+Codex 호출 시 항상 아래 섹션을 포함한다:
+
+- [GOAL] 정확히 무엇을 바꾸는가
+- [CONSTRAINTS]
+  - "Output must be unified diff"
+  - "Do not change unrelated files"
+  - "Include commands: reproduce + verify"
+  - "Respect Conda env: <ENV_NAME>, Python: <ver>"
+- [CONTEXT]
+  - repo 구조, 관련 파일 경로, 사용 라이브러리/버전
+- [INPUTS]
+  - 에러 로그/현재 코드/재현 방법
+- [OUTPUTS]
+  - patch/diff
+  - run commands
+  - tests/smoke commands
+- [VALIDATION]
+  - 최소 재현 1개, 검증 1개
+
+### 2.3 Codex 호출 템플릿(예시)
+```bash
+export PROMPT=$(cat <<'EOF'
+[GOAL]
+...
+
+[CONSTRAINTS]
+- Output must be unified diff.
+- Provide reproduce + verify commands.
+- Conda env: <ENV_NAME>, Python: <ver>
+- Do not modify unrelated files.
+
+[CONTEXT]
+...
+
+[INPUTS]
+...
+
+[OUTPUTS]
+- Unified diff patch
+- Commands to reproduce + verify
+
+[VALIDATION]
+- Reproduce:
+- Verify:
+EOF
+)
+
+codex <<'EOF'
+$PROMPT
+EOF
+```
