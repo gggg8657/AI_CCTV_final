@@ -90,3 +90,440 @@ EXCEPTIONS
 - 임시 파일이나 테스트 파일
 - 사용자가 명시적으로 "커밋하지 마" 요청 시
 - 작업이 아직 완료되지 않은 경우 (Draft 상태)
+
+━━━━━━━━━━━━━━━━━━━━
+PERPLEXITY MCP RULES
+━━━━━━━━━━━━━━━━━━━━
+
+Perplexity MCP를 사용할 때:
+1. **요청 쿼리 표시**: Perplexity에 보낸 검색 쿼리를 채팅창에 표시
+2. **응답 원본 표시**: Perplexity 검색 결과는 요약하지 말고 **원본 응답 전체를 그대로 대화창에 표시**해야 함
+3. **원문 보존**: 사용자가 검색 결과를 직접 확인할 수 있도록 원문을 보존
+4. **별도 분석 제공**: 검색 결과를 기반으로 한 분석이나 요약은 별도로 제공하되, 원본 결과는 반드시 포함
+
+표시 형식:
+```
+[Perplexity Search Query]
+<검색 쿼리>
+
+[Perplexity Search Results]
+<원본 응답 전체>
+- 결과 1: [제목] [URL] [전체 내용]
+- 결과 2: [제목] [URL] [전체 내용]
+...
+
+[Analysis]
+<필요시 추가 분석>
+```
+
+예시:
+- ❌ 잘못된 방식: "Perplexity 검색 결과를 확인했습니다. 버전은 v0.2.6입니다."
+- ✅ 올바른 방식:
+  ```
+  [Perplexity Search Query]
+  Vision-Agents Security Camera Example event system architecture
+  
+  [Perplexity Search Results]
+  결과 1: Chapter 13: Pattern 5: Vision-Based Agents
+  URL: https://...
+  [전체 내용 원문]
+  
+  [Analysis]
+  검색 결과를 분석한 결과...
+  ```
+
+━━━━━━━━━━━━━━━━━━━━
+CONDA + CODEX CLI + PERPLEXITY MCP RULES
+━━━━━━━━━━━━━━━━━━━━
+
+Always respond in Korean
+
+## 0) Purpose
+- Repo별 Conda 환경이 다른 상황에서도, 실행/재현/검증이 가능한 개발/연구 워크플로우를 강제한다.
+- 코딩 작업은 Codex CLI를 "초안 생성기"로 사용하고, 본 에이전트(Cursor)는 최종 품질과 재현성(테스트/스모크)을 보장한다.
+- 조사/팩트체크/최신 확인은 Perplexity MCP를 사용하며, 출처 기반으로만 결론을 내린다.
+- 모든 답변은 실행 가능한 다음 액션(I propose...)를 포함한다.
+
+---
+
+## 1) Repo별 Conda Environment 규약 (강제)
+### 1.1 Single Source of Truth(SSOT)
+각 레포는 다음 중 최소 1개를 반드시 갖는다. 우선순위는 아래와 같다:
+1) `environment.yml` (권장, 재현성 최우선)
+2) `ENVIRONMENT.md` (설명/실행/검증 커맨드 문서)
+3) (선택) `requirements.txt`/`pyproject.toml`/`conda-lock.yml` 등 보조
+
+### 1.2 ENVIRONMENT.md 최소 템플릿(레포 루트)
+`ENVIRONMENT.md`가 없다면, 코드 작업 전에 이를 먼저 추가하도록 제안한다.
+
+- ENV_NAME: <conda env name>
+- PYTHON: <version>
+- CUDA: <version or "cpu">
+- CREATE:
+  - `conda env create -f environment.yml` (권장)
+  - or `conda create -n <ENV_NAME> python=<ver>`
+- ACTIVATE:
+  - `conda activate <ENV_NAME>`
+- VERIFY (최소 2개):
+  - `python -V`
+  - `python -c "import torch; print(torch.__version__, torch.cuda.is_available())"` (torch 사용 시)
+- RUN (대표 1~3개):
+  - 예) `python train.py ...`
+  - 예) `python demo.py ...`
+- TEST/SMOKE (최소 1개):
+  - 예) `pytest -q`
+  - 예) `python -m compileall .`
+- NOTES:
+  - GPU/드라이버/특이 사항, 데이터 경로, 권한 이슈
+
+### 1.3 작업 시작 Preflight(필수)
+개발/실험/디버깅에 착수하기 전에, 아래 체크를 항상 수행한다:
+- [ ] 레포 루트 기준 작업인지 확인(경로 명시)
+- [ ] Conda env 활성화 명시: `conda activate <ENV_NAME>`
+- [ ] VERIFY 커맨드 최소 2개 확보 및 실행 가능 상태 확인
+- [ ] 재현 커맨드(에러 재현/실험 실행) 최소 1개 확보
+- [ ] 변경 후 검증 커맨드(TEST/SMOKE) 최소 1개 확보
+
+Preflight 정보가 없으면:
+- 에이전트는 먼저 필요한 정보를 "확보하는 액션"을 제안하고, 무리한 추측으로 진행하지 않는다.
+
+### 1.4 Env 매핑(개인 워크스페이스 권장 규약)
+(권장) 상위 디렉토리에 `REPO_ENVS.md`를 유지한다.
+- repo_path → env_name → python/cuda → run/test → notes
+
+에이전트는 레포가 바뀌면 항상 env 매핑을 확인/갱신하도록 제안한다.
+
+---
+
+## 2) Codex CLI 협업 규약 (코딩/개발 작업)
+### 2.1 Codex와 Cursor의 협업 관계
+- **Codex**: 코드 초안 생성기 (패치 생성)
+- **Cursor**: 검수자 및 통합자 (품질 보장, 테스트, 문서화)
+- **협업 방식**: 순환형 대화를 통한 반복적 개선
+  - Cursor → Codex: 초안 요청 또는 수정 요청
+  - Codex → Cursor: 패치 제공
+  - Cursor → Codex: 피드백 및 추가 수정 요청
+  - 반복하여 품질 향상
+
+### 2.2 협업 워크플로우
+```
+1. [정보 수집] Perplexity로 관련 정보 조사 (사전 조사)
+   ↓
+2. [초안 생성] Cursor → Codex: "이렇게 만들어주세요"
+   ↓
+3. [검토 및 피드백] Cursor가 Codex 출력 검토
+   ↓
+4. [수정 요청] Cursor → Codex: "이 부분 수정해주세요" (필요시)
+   ↓
+5. [수정본 제공] Codex → Cursor: "수정했습니다"
+   ↓
+6. [반복] 3-5 반복 (필요시)
+   ↓
+7. [최종 통합] Cursor가 테스트/문서화/통합 완료
+```
+
+### 2.3 협업 종료 조건
+- **협업 종료**: 모듈 테스트들이 완수되면 종료
+- 테스트 통과, 문서화 완료, 기존 코드와 통합 완료 시점
+- 사용자가 명시적으로 "완료" 요청 시에도 종료 가능
+
+### 2.4 Codex는 "패치 생성기", Cursor는 "검수자"
+- Codex의 출력은 기본적으로 unified diff(패치) 형태를 요구한다.
+- Cursor는 패치를 적용하기 전후로 재현/검증 커맨드를 제시하고, 리스크를 평가한다.
+
+### 2.2 Codex 입력 프롬프트 표준(구조화 강제)
+Codex 호출 시 항상 아래 섹션을 포함한다:
+
+- [GOAL] 정확히 무엇을 바꾸는가
+- [CONSTRAINTS]
+  - "Output must be unified diff"
+  - "Do not change unrelated files"
+  - "Include commands: reproduce + verify"
+  - "Respect Conda env: <ENV_NAME>, Python: <ver>"
+- [CONTEXT]
+  - repo 구조, 관련 파일 경로, 사용 라이브러리/버전
+- [INPUTS]
+  - 에러 로그/현재 코드/재현 방법
+- [OUTPUTS]
+  - patch/diff
+  - run commands
+  - tests/smoke commands
+- [VALIDATION]
+  - 최소 재현 1개, 검증 1개
+
+### 2.3 Codex 호출 템플릿(예시)
+```bash
+export PROMPT=$(cat <<'EOF'
+[GOAL]
+...
+
+[CONSTRAINTS]
+- Output must be unified diff.
+- Provide reproduce + verify commands.
+- Conda env: <ENV_NAME>, Python: <ver>
+- Do not modify unrelated files.
+
+[CONTEXT]
+...
+
+[INPUTS]
+...
+
+[OUTPUTS]
+- Unified diff patch
+- Commands to reproduce + verify
+
+[VALIDATION]
+- Reproduce:
+- Verify:
+EOF
+)
+
+codex <<'EOF'
+$PROMPT
+EOF
+```
+
+### 2.5 Codex ↔ Cursor 대화 형식 (구조화된 요청/응답)
+Codex와 Cursor 간의 모든 대화는 구조화된 형식으로 표시한다:
+
+**Cursor → Codex 요청 형식**:
+```
+[Codex Request #N]
+요청 타입: [초안 생성 | 수정 요청 | 질문]
+목표: <명확한 목표>
+프롬프트:
+[GOAL]
+...
+[CONSTRAINTS]
+...
+[CONTEXT]
+...
+[INPUTS]
+...
+[OUTPUTS]
+...
+[VALIDATION]
+...
+```
+
+**Codex → Cursor 응답 형식**:
+```
+[Codex Response #N]
+상태: [성공 | 부분 성공 | 실패]
+응답:
+<전체 응답 (diff 패치 또는 텍스트)>
+```
+
+**Cursor → Codex 피드백 형식** (수정 요청 시):
+```
+[Cursor Feedback #N]
+검토 결과: [통과 | 수정 필요 | 추가 질문]
+피드백:
+- 항목 1: <구체적 피드백>
+- 항목 2: <구체적 피드백>
+수정 요청:
+[GOAL]
+수정할 부분: <명확한 수정 사항>
+...
+```
+
+### 2.6 Codex 응답 표시 규칙 (필수)
+Codex CLI를 사용할 때는 다음 규칙을 반드시 준수한다:
+
+1. **요청 프롬프트 표시**: Cursor가 Codex에 보낸 전체 프롬프트를 채팅창에 그대로 표시
+   - 사용자가 어떤 요청을 Codex에 보냈는지 확인 가능
+   - 프롬프트 구조 ([GOAL], [CONSTRAINTS] 등) 전체 표시
+
+2. **응답 원본 표시**: Codex의 응답을 요약하지 말고 **원본 응답 전체를 그대로 채팅창에 표시**
+   - Unified diff 패치 전체 표시
+   - 에러 메시지가 있으면 전체 표시
+   - 출력된 모든 텍스트 보존
+
+3. **대화 순서 표시**: 요청-응답 쌍에 번호를 매겨 순서를 명확히 표시
+   ```
+   [Codex Request #1]
+   <전체 프롬프트>
+   
+   [Codex Response #1]
+   <전체 응답>
+   
+   [Cursor Feedback #1]
+   <피드백>
+   
+   [Codex Request #2]
+   <수정 요청>
+   ...
+   ```
+
+4. **추가 분석은 별도 제공**: Codex 응답을 기반으로 한 분석이나 요약은 원본 표시 후 별도로 제공
+
+예시:
+- ❌ 잘못된 방식: "Codex로 EventBus 클래스를 생성했습니다. diff 패치를 적용했습니다."
+- ✅ 올바른 방식:
+  ```
+  [Codex Request #1]
+  요청 타입: 초안 생성
+  목표: EventBus 클래스 생성
+  [GOAL]
+  Create EventBus class...
+  [전체 프롬프트]
+  
+  [Codex Response #1]
+  상태: 성공
+  응답:
+  --- /dev/null
+  +++ b/src/utils/event_bus.py
+  [전체 diff 패치]
+  
+  [Cursor Feedback #1]
+  검토 결과: 수정 필요
+  피드백:
+  - 에러 처리가 부족함
+  - 타입 힌트 보완 필요
+  수정 요청:
+  [GOAL]
+  에러 처리 및 타입 힌트 추가
+  ...
+  
+  [Codex Response #2]
+  상태: 성공
+  응답:
+  [수정된 diff 패치]
+  ```
+
+### 2.7 Codex 호출 로깅
+Codex CLI 호출 시 다음 정보를 채팅창에 표시:
+- 호출 시각
+- 프롬프트 길이/구조
+- 응답 상태 (성공/실패)
+- 응답 길이
+- 실행 시간 (가능한 경우)
+- 대화 라운드 번호 (Request #N)
+# Tool Auto-Trigger Gates (Codex CLI / Perplexity MCP)
+
+Always respond in Korean
+
+## 1) Codex CLI 자동 트리거 조건 (문장 트리거 없이도 발동)
+아래 중 하나라도 해당하면, 사용자가 명시하지 않아도 Codex CLI 협업을 사용한다.
+
+### Codex Gate A: Code-change required
+- 사용자의 요청이 "코드 변경"을 요구하거나 암시하면 Codex를 호출한다.
+  - 예: bug fix, refactor, add feature, optimize, write script, implement module
+  - 예: "에러 해결", "이거 고쳐", "리팩터링", "속도 개선", "모듈 추가"
+
+### Codex Gate B: Patch/diff is the best output
+- 최종 산출물이 코드/패치/설정 변경일 때는 Codex를 사용한다.
+
+### Codex Gate C: Non-trivial code reasoning
+- 로직이 복잡하거나(멀티프로세스/분산/비동기/성능), 수정 범위가 넓을 가능성이 있으면 Codex를 사용한다.
+
+#### Codex 호출 원칙(고정)
+- diff-only (unified diff)
+- reproduce + verify commands 의무
+- conda env 정보 포함
+
+---
+
+## 2) Perplexity MCP 역할 및 호출 시점
+### 2.1 Perplexity의 역할
+- **정보 제공자**: Codex ↔ Cursor 협업을 지원하는 정보 제공 역할
+- **사전 조사**: 협업 시작 전 관련 정보 수집
+- **협업 중 정보 확인**: Codex ↔ Cursor 협업 중 불확실한 정보 발생 시 확인
+
+### 2.2 Perplexity 호출 시점
+**시점 A: 사전 조사 (협업 시작 전)**
+- 새로운 기능 구현 전 관련 기술/패턴 조사
+- 최신 라이브러리/프레임워크 정보 확인
+- 베스트 프랙티스 조사
+
+**시점 B: 협업 중 정보 확인 (필요시)**
+- Codex ↔ Cursor 협업 중 불확실한 정보 발생 시
+- 기술 스펙 확인이 필요한 경우
+- 호환성/지원 여부 확인이 필요한 경우
+
+### 2.3 Perplexity 자동 트리거 조건 (문장 트리거 없이도 발동)
+아래 중 하나라도 해당하면, 사용자가 명시하지 않아도 Perplexity로 검증한다.
+
+### Perplexity Gate A: Time-sensitive / latest
+- "최신", "현재", "요즘", "업데이트", "정책", "가격", "지원 여부", "버전" 등의 시점 민감 정보가 포함되면 Perplexity를 사용한다.
+
+### Perplexity Gate B: Fact-check / evidence needed
+- 사용자가 근거/출처/레퍼런스를 요구하거나, 내가 불확실한 사실이 있으면 Perplexity를 사용한다.
+
+### Perplexity Gate C: Unknown / ambiguous term
+- 용어가 애매하거나(혹은 신조어/제품명/프로젝트명), 내가 확신할 수 없으면 Perplexity로 확인한다.
+
+### Perplexity Gate D: Spec/compatibility questions
+- "이거 되냐", "지원하냐", "호환되냐", "CLI 있냐" 같은 호환/지원 여부 질문은 Perplexity를 기본으로 사용한다.
+
+### Perplexity Gate E: 협업 중 정보 필요
+- Codex ↔ Cursor 협업 중 기술 스펙, API 사용법, 패턴 등이 불확실할 때
+- Codex가 질문하거나 Cursor가 확인이 필요하다고 판단할 때
+
+### 2.4 Perplexity 대체 방안 (Fallback)
+Perplexity MCP가 사용 불가능하거나 오류가 발생할 때:
+
+**우선순위 1: Cursor가 스스로 검색/조사**
+- Cursor의 지식 기반으로 최선의 답변 제공
+- 공개된 문서, GitHub 저장소, 공식 문서 참조
+- 일반적인 베스트 프랙티스 기반 추론
+
+**우선순위 2: Codex에게 정보 요청 (가능한 경우)**
+- Codex가 검색 기능을 지원하는 경우, Codex에게 정보 요청
+- Codex 응답을 채팅창에 원본 그대로 표시
+
+**우선순위 3: 사용자에게 확인 요청**
+- 불확실한 정보는 사용자에게 확인 요청
+- 추측하지 않고 명시적으로 질문
+
+**대체 방안 적용 시:**
+- Perplexity 오류를 명시적으로 표시
+- 사용된 대체 방안을 명시
+- 정보의 신뢰도 수준을 표시 (예: "일반적인 베스트 프랙티스 기반", "공식 문서 기반", "확인 필요")
+
+---
+
+## 3) 복합 요청 처리 규칙 (Perplexity + Codex ↔ Cursor 협업)
+- "개발 + 스펙 확인"이 섞인 경우:
+  1) **Perplexity로 사실/스펙을 먼저 확정** (사전 조사)
+     - Perplexity 사용 불가 시: Cursor가 스스로 조사 또는 Codex에게 정보 요청
+  2) 확정된 스펙을 Codex 입력으로 주입
+  3) **Codex ↔ Cursor 순환형 협업** 시작
+  4) 협업 중 추가 정보 필요 시:
+     - Perplexity 재호출 시도 (가능한 경우)
+     - Perplexity 사용 불가 시: Cursor가 스스로 조사 또는 Codex에게 정보 요청
+  5) 모듈 테스트 완수까지 반복
+  6) Cursor가 최종 통합/검증
+
+**Perplexity 오류 처리:**
+- Perplexity 호출 실패 시 즉시 대체 방안 적용
+- 오류 원인을 명시하고 사용된 대체 방안을 기록
+- 사용자에게 정보의 신뢰도 수준을 명확히 표시
+
+**협업 흐름 예시**:
+```
+[Perplexity] 이벤트 버스 패턴 조사
+  ↓
+[Cursor → Codex #1] "이벤트 버스 클래스 생성"
+  ↓
+[Codex → Cursor #1] diff 패치 제공
+  ↓
+[Cursor Feedback #1] "에러 처리 추가 필요"
+  ↓
+[Cursor → Codex #2] "에러 처리 추가"
+  ↓
+[Codex → Cursor #2] 수정된 패치 제공
+  ↓
+[Cursor] 테스트 작성 및 통과 확인
+  ↓
+[완료] 모듈 테스트 완수
+```
+
+---
+
+## 4) 사용자 문장 트리거는 보조로 유지
+- 사용자가 명시하면(“퍼플렉시티로”, “Codex로”) 무조건 해당 툴 우선
+- 명시가 없으면 위 Gate 규칙으로 자동 판단
+
+
