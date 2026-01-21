@@ -20,6 +20,7 @@ import queue
 import threading
 import logging
 import tempfile
+import asyncio
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
 from pathlib import Path
@@ -52,6 +53,16 @@ except ImportError:
 # 프로젝트 루트
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# 이벤트 시스템 import
+from src.utils import (
+    EventBus,
+    AnomalyDetectedEvent,
+    VLMAnalysisCompletedEvent,
+    AgentResponseEvent,
+    FrameProcessedEvent,
+    StatsUpdatedEvent,
+)
 
 
 # =============================================================================
@@ -814,7 +825,10 @@ class E2ESystem:
         self.is_running = False
         self._stop_event = threading.Event()
         
-        # 콜백
+        # 이벤트 버스 (신규)
+        self.event_bus: Optional[EventBus] = EventBus(max_history=1000)
+        
+        # 콜백 (하위 호환성 유지)
         self.on_frame_callback: Optional[Callable] = None
         self.on_anomaly_callback: Optional[Callable] = None
         self.on_stats_callback: Optional[Callable] = None
@@ -911,6 +925,14 @@ class E2ESystem:
             except Exception as e:
                 self.logger.log_warning(f"Agent initialization error: {str(e)}")
         
+        # 이벤트 버스 시작
+        if self.event_bus:
+            try:
+                self.event_bus.start()
+                self.logger.log_info("EventBus started")
+            except Exception as e:
+                self.logger.log_warning(f"EventBus start failed: {e} (continuing without async event processing)")
+        
         self.logger.log_info("E2E System initialized successfully")
         return True, None
     
@@ -932,6 +954,14 @@ class E2ESystem:
         """시스템 중지"""
         self._stop_event.set()
         self.is_running = False
+        
+        # 이벤트 버스 중지
+        if self.event_bus:
+            try:
+                self.event_bus.stop()
+                self.logger.log_info("EventBus stopped")
+            except Exception as e:
+                self.logger.log_warning(f"EventBus stop error: {e}")
         
         if self.video_source:
             self.video_source.close()
@@ -1028,6 +1058,23 @@ class E2ESystem:
                     if self.stats.total_frames <= 20:
                         self.logger.log_warning(f"[CALLBACK WARNING] Frame callback is None for frame {self.stats.total_frames}")
                 
+                # 프레임 처리 이벤트 발행 (이벤트 버스)
+                if self.event_bus:
+                    try:
+                        frame_event = FrameProcessedEvent(
+                            event_id="",
+                            event_type="FrameProcessedEvent",
+                            timestamp=datetime.now().isoformat(),
+                            source="E2ESystem",
+                            frame_id=self.stats.total_frames,
+                            processing_time=0.0,  # VAD 전이므로 0
+                            vad_score=0.0
+                        )
+                        # 동기 발행 (비동기 루프가 없을 수 있음)
+                        self.event_bus.publish_sync(frame_event)
+                    except Exception as e:
+                        self.logger.log_warning(f"FrameProcessedEvent publish error: {e}")
+                
                 # 클립 버퍼에 추가
                 if self.clip_saver:
                     self.clip_saver.add_frame(frame)
@@ -1079,9 +1126,42 @@ class E2ESystem:
                     except Exception as e:
                         self.logger.log_warning(f"Frame callback update error: {e}")
                 
+                # 프레임 처리 이벤트 발행 (VAD 점수 포함)
+                if self.event_bus and vad_score != 0.0:
+                    try:
+                        frame_event = FrameProcessedEvent(
+                            event_id="",
+                            event_type="FrameProcessedEvent",
+                            timestamp=datetime.now().isoformat(),
+                            source="E2ESystem",
+                            frame_id=self.stats.total_frames,
+                            processing_time=vad_time,
+                            vad_score=vad_score
+                        )
+                        self.event_bus.publish_sync(frame_event)
+                    except Exception as e:
+                        self.logger.log_warning(f"FrameProcessedEvent publish error: {e}")
+                
                 # 통계 콜백
                 if self.on_stats_callback:
                     self.on_stats_callback(self.stats)
+                
+                # 통계 업데이트 이벤트 발행
+                if self.event_bus and time.time() - fps_start_time >= 1.0:
+                    try:
+                        stats_event = StatsUpdatedEvent(
+                            event_id="",
+                            event_type="StatsUpdatedEvent",
+                            timestamp=datetime.now().isoformat(),
+                            source="E2ESystem",
+                            total_frames=self.stats.total_frames,
+                            anomaly_count=self.stats.anomaly_count,
+                            avg_processing_time=self.stats.avg_vad_time,
+                            current_fps=self.stats.current_fps
+                        )
+                        self.event_bus.publish_sync(stats_event)
+                    except Exception as e:
+                        self.logger.log_warning(f"StatsUpdatedEvent publish error: {e}")
                 
                 # FPS 제한 및 부하 감지
                 elapsed = time.time() - loop_start
@@ -1117,7 +1197,25 @@ class E2ESystem:
         if self.clip_saver:
             clip_path = self.clip_saver.save_clip(event_id)
         
-        # 이벤트 생성
+        # 이상 감지 이벤트 발행 (이벤트 버스)
+        anomaly_event = None
+        if self.event_bus:
+            try:
+                anomaly_event = AnomalyDetectedEvent(
+                    event_id=event_id,
+                    event_type="AnomalyDetectedEvent",
+                    timestamp=datetime.now().isoformat(),
+                    source="VAD",
+                    frame_id=self.stats.total_frames,
+                    score=vad_score,
+                    threshold=self.config.vad_threshold,
+                    frame=frame.copy() if HAS_CV2 else None
+                )
+                self.event_bus.publish_sync(anomaly_event)
+            except Exception as e:
+                self.logger.log_warning(f"AnomalyDetectedEvent publish error: {e}")
+        
+        # 기존 AnomalyEvent 생성 (하위 호환성)
         event = AnomalyEvent(
             id=event_id,
             timestamp=datetime.now(),
@@ -1135,6 +1233,25 @@ class E2ESystem:
             event.vlm_description = vlm_result.get("description", "")
             event.vlm_confidence = vlm_result.get("confidence", 0.0)
             self.stats.avg_vlm_time = vlm_result.get("latency_ms", 0) / 1000
+            
+            # VLM 분석 완료 이벤트 발행
+            if self.event_bus and anomaly_event:
+                try:
+                    vlm_event = VLMAnalysisCompletedEvent(
+                        event_id="",
+                        event_type="VLMAnalysisCompletedEvent",
+                        timestamp=datetime.now().isoformat(),
+                        source="VLM",
+                        original_event_id=anomaly_event.event_id,
+                        detected_type=event.vlm_type,
+                        description=event.vlm_description,
+                        actions=vlm_result.get("actions", []),
+                        confidence=event.vlm_confidence,
+                        clip_path=clip_path
+                    )
+                    self.event_bus.publish_sync(vlm_event)
+                except Exception as e:
+                    self.logger.log_warning(f"VLMAnalysisCompletedEvent publish error: {e}")
         
         # Agent 처리
         if self.agent:
@@ -1142,12 +1259,29 @@ class E2ESystem:
             event.agent_actions = agent_result.get("actions", [])
             event.agent_response_time = agent_result.get("processing_time", 0)
             self.stats.avg_agent_time = event.agent_response_time
+            
+            # Agent 대응 이벤트 발행
+            if self.event_bus and anomaly_event:
+                try:
+                    agent_event = AgentResponseEvent(
+                        event_id="",
+                        event_type="AgentResponseEvent",
+                        timestamp=datetime.now().isoformat(),
+                        source="Agent",
+                        original_event_id=anomaly_event.event_id,
+                        plan=event.agent_actions,
+                        priority=agent_result.get("priority", 3),
+                        estimated_time=event.agent_response_time
+                    )
+                    self.event_bus.publish_sync(agent_event)
+                except Exception as e:
+                    self.logger.log_warning(f"AgentResponseEvent publish error: {e}")
         
         # 이벤트 로깅
         self.logger.log_event(event)
         self.stats.anomaly_count += 1
         
-        # 이상 콜백
+        # 이상 콜백 (하위 호환성)
         if self.on_anomaly_callback:
             self.on_anomaly_callback(event)
     
@@ -1168,6 +1302,10 @@ class E2ESystem:
     def get_current_score(self) -> float:
         """현재 이상 점수 조회"""
         return self.current_score
+    
+    def get_event_bus(self) -> Optional[EventBus]:
+        """이벤트 버스 반환"""
+        return self.event_bus
 
 
 # =============================================================================
