@@ -1,0 +1,70 @@
+# E2E Security Monitoring System Configuration
+# =============================================
+
+# 비디오 소스 설정
+video:
+  # 소스 타입: file, rtsp, webcam
+  source_type: file
+  # 소스 경로 (파일 경로, RTSP URL, 또는 웹캠 인덱스)
+  source_path: "/path/to/video.mp4"
+  # 타겟 FPS
+  target_fps: 30
+  # 디스플레이 해상도
+  display_width: 640
+  display_height: 480
+
+# VAD 모델 설정
+vad:
+  # 모델 종류: mnad, mulde, memae, stae
+  model: mnad
+  # 이상 탐지 임계값 (0.0 ~ 1.0)
+  threshold: 0.5
+  # 체크포인트 경로 (비어있으면 기본값 사용)
+  checkpoint_path: ""
+
+# VLM 설정
+vlm:
+  # VLM 활성화 여부
+  enabled: true
+  # 분석에 사용할 프레임 수
+  n_frames: 4
+  # 모델 경로 (비어있으면 기본값 사용)
+  model_path: ""
+  # 속도 최적화 모드
+  optimize: true
+
+# Agent 설정
+agent:
+  # Agent 활성화 여부
+  enabled: true
+  # Flow 종류: sequential, hierarchical, collaborative
+  flow: sequential
+
+# 클립 저장 설정
+clip:
+  # 클립 저장 활성화
+  enabled: true
+  # 클립 길이 (초)
+  duration: 3.0
+  # 클립 저장 디렉토리
+  directory: clips
+
+# 로깅 설정
+logging:
+  # 로그 디렉토리
+  directory: logs
+  # 로그 레벨: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+
+# GPU 설정
+gpu:
+  # 사용할 GPU ID
+  device_id: 2
+
+# UI 설정
+ui:
+  # 기본 UI 모드: cli, web
+  default_mode: cli
+  # Web UI 포트
+  web_port: 8501
+
