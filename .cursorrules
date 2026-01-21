@@ -224,3 +224,59 @@ codex <<'EOF'
 $PROMPT
 EOF
 ```
+# Tool Auto-Trigger Gates (Codex CLI / Perplexity MCP)
+
+Always respond in Korean
+
+## 1) Codex CLI 자동 트리거 조건 (문장 트리거 없이도 발동)
+아래 중 하나라도 해당하면, 사용자가 명시하지 않아도 Codex CLI 협업을 사용한다.
+
+### Codex Gate A: Code-change required
+- 사용자의 요청이 "코드 변경"을 요구하거나 암시하면 Codex를 호출한다.
+  - 예: bug fix, refactor, add feature, optimize, write script, implement module
+  - 예: "에러 해결", "이거 고쳐", "리팩터링", "속도 개선", "모듈 추가"
+
+### Codex Gate B: Patch/diff is the best output
+- 최종 산출물이 코드/패치/설정 변경일 때는 Codex를 사용한다.
+
+### Codex Gate C: Non-trivial code reasoning
+- 로직이 복잡하거나(멀티프로세스/분산/비동기/성능), 수정 범위가 넓을 가능성이 있으면 Codex를 사용한다.
+
+#### Codex 호출 원칙(고정)
+- diff-only (unified diff)
+- reproduce + verify commands 의무
+- conda env 정보 포함
+
+---
+
+## 2) Perplexity MCP 자동 트리거 조건 (문장 트리거 없이도 발동)
+아래 중 하나라도 해당하면, 사용자가 명시하지 않아도 Perplexity로 검증한다.
+
+### Perplexity Gate A: Time-sensitive / latest
+- "최신", "현재", "요즘", "업데이트", "정책", "가격", "지원 여부", "버전" 등의 시점 민감 정보가 포함되면 Perplexity를 사용한다.
+
+### Perplexity Gate B: Fact-check / evidence needed
+- 사용자가 근거/출처/레퍼런스를 요구하거나, 내가 불확실한 사실이 있으면 Perplexity를 사용한다.
+
+### Perplexity Gate C: Unknown / ambiguous term
+- 용어가 애매하거나(혹은 신조어/제품명/프로젝트명), 내가 확신할 수 없으면 Perplexity로 확인한다.
+
+### Perplexity Gate D: Spec/compatibility questions
+- "이거 되냐", "지원하냐", "호환되냐", "CLI 있냐" 같은 호환/지원 여부 질문은 Perplexity를 기본으로 사용한다.
+
+---
+
+## 3) 복합 요청 처리 규칙
+- "개발 + 스펙 확인"이 섞인 경우:
+  1) Perplexity로 사실/스펙을 먼저 확정
+  2) 확정된 스펙을 Codex 입력으로 주입
+  3) Codex로 patch 생성
+  4) Cursor가 통합/검증
+
+---
+
+## 4) 사용자 문장 트리거는 보조로 유지
+- 사용자가 명시하면(“퍼플렉시티로”, “Codex로”) 무조건 해당 툴 우선
+- 명시가 없으면 위 Gate 규칙으로 자동 판단
+
+
