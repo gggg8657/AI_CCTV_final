@@ -1,7 +1,7 @@
 # Core Dependencies
 torch>=2.0.0
 torchvision>=0.15.0
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0  # PyTorch 호환성을 위해 NumPy 2.x 제외
 opencv-python>=4.8.0
 Pillow>=10.0.0
 
