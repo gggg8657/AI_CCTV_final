@@ -16,6 +16,9 @@ accelerate>=0.24.0
 # Agent (llama.cpp)
 llama-cpp-python>=0.2.0
 
+# API 모드 지원 (OpenAI-compatible API)
+openai>=1.0.0
+
 # Web UI
 streamlit>=1.28.0
 rich>=13.7.0

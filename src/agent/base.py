@@ -19,6 +19,13 @@ from typing import List, Dict, TypedDict, Optional, Any
 import cv2
 import numpy as np
 
+# API 모드 지원을 위한 import (선택적)
+try:
+    from openai import OpenAI
+    HAS_OPENAI = True
+except ImportError:
+    HAS_OPENAI = False
+
 from .actions import AVAILABLE_ACTIONS, SCENARIO_ACTIONS, ACTION_PRIORITY
 
 
@@ -99,10 +106,18 @@ class LLMManager:
             self.vision_loaded = False
             self.text_loaded = False
             self.config = DEFAULT_CONFIG.copy()
-            # 외부 config에서 모델 경로 업데이트
+            self.mode = "local"  # "local" or "api"
+            self.api_config = {}  # API 모드 설정
+            
+            # 외부 config에서 모델 경로 및 모드 업데이트
             if config:
                 if "llm" in config:
                     llm_config = config["llm"]
+                    # 모드 설정
+                    if "mode" in llm_config:
+                        self.mode = llm_config["mode"]
+                    
+                    # Local 모드 설정
                     if "text_model_path" in llm_config:
                         self.config["TEXT_MODEL_PATH"] = llm_config["text_model_path"]
                     if "vision_model_path" in llm_config:
@@ -117,6 +132,10 @@ class LLMManager:
                         self.config["N_THREADS"] = llm_config["n_threads"]
                     if "n_batch" in llm_config:
                         self.config["N_BATCH"] = llm_config["n_batch"]
+                    
+                    # API 모드 설정
+                    if "api" in llm_config:
+                        self.api_config = llm_config["api"]
                 if "gpu" in config and "device_id" in config["gpu"]:
                     self.config["MAIN_GPU"] = config["gpu"]["device_id"]
             LLMManager._initialized = True
@@ -127,29 +146,54 @@ class LLMManager:
             return True
         
         try:
-            from llama_cpp import Llama
-            from llama_cpp.llama_chat_format import Qwen25VLChatHandler
-            
-            logging.info("Vision LLM 로드 중...")
-            main_gpu = gpu_id if gpu_id is not None else self.config["MAIN_GPU"]
-            
-            self.vision_llm = Llama(
-                model_path=self.config["VISION_MODEL_PATH"],
-                chat_handler=Qwen25VLChatHandler(clip_model_path=self.config["MM_PROJ_PATH"]),
-                n_gpu_layers=self.config["N_GPU_LAYERS"],
-                n_ctx=self.config["N_CTX"],
-                n_threads=self.config["N_THREADS"],
-                n_batch=self.config["N_BATCH"],
-                main_gpu=main_gpu,
-                use_mmap=True,
-                use_mlock=True,
-                verbose=False
-            )
-            self.vision_loaded = True
-            logging.info("Vision LLM 로드 완료")
-            return True
+            if self.mode == "api":
+                # API 모드: OpenAI-compatible API 클라이언트 사용
+                logging.info("Vision LLM 로드 중 (API 모드)...")
+                try:
+                    from openai import OpenAI
+                except ImportError:
+                    logging.error("openai 패키지가 설치되지 않았습니다. pip install openai")
+                    return False
+                
+                base_url = self.api_config.get("base_url", "http://localhost:8000/v1")
+                api_key = self.api_config.get("api_key", "EMPTY")
+                
+                self.vision_llm = OpenAI(
+                    base_url=base_url,
+                    api_key=api_key
+                )
+                # API 모드에서는 모델 이름 저장
+                self.vision_model_name = self.api_config.get("vision_model", "Qwen/Qwen2.5-VL-7B")
+                self.vision_loaded = True
+                logging.info(f"Vision LLM API 연결 완료: {base_url}")
+                return True
+            else:
+                # Local 모드: llama.cpp 사용
+                from llama_cpp import Llama
+                from llama_cpp.llama_chat_format import Qwen25VLChatHandler
+                
+                logging.info("Vision LLM 로드 중 (Local 모드)...")
+                main_gpu = gpu_id if gpu_id is not None else self.config["MAIN_GPU"]
+                
+                self.vision_llm = Llama(
+                    model_path=self.config["VISION_MODEL_PATH"],
+                    chat_handler=Qwen25VLChatHandler(clip_model_path=self.config["MM_PROJ_PATH"]),
+                    n_gpu_layers=self.config["N_GPU_LAYERS"],
+                    n_ctx=self.config["N_CTX"],
+                    n_threads=self.config["N_THREADS"],
+                    n_batch=self.config["N_BATCH"],
+                    main_gpu=main_gpu,
+                    use_mmap=True,
+                    use_mlock=True,
+                    verbose=False
+                )
+                self.vision_loaded = True
+                logging.info("Vision LLM 로드 완료 (Local 모드)")
+                return True
         except Exception as e:
             logging.error(f"Vision LLM 로드 실패: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
             return False
     
     def load_text_llm(self, gpu_id: int = None) -> bool:
@@ -158,33 +202,58 @@ class LLMManager:
             return True
         
         try:
-            from llama_cpp import Llama
-            
-            logging.info("Text LLM 로드 중...")
-            
-            if not os.path.exists(self.config["TEXT_MODEL_PATH"]):
-                logging.error(f"모델 파일을 찾을 수 없습니다: {self.config['TEXT_MODEL_PATH']}")
-                return False
-            
-            main_gpu = gpu_id if gpu_id is not None else self.config["MAIN_GPU"]
-            
-            self.text_llm = Llama(
-                model_path=self.config["TEXT_MODEL_PATH"],
-                n_gpu_layers=self.config["N_GPU_LAYERS"],
-                n_ctx=self.config["N_CTX"],
-                n_threads=self.config["N_THREADS"],
-                n_batch=self.config["N_BATCH"],
-                main_gpu=main_gpu,
-                use_mmap=True,
-                use_mlock=True,
-                chat_format="chatml",
-                verbose=False
-            )
-            self.text_loaded = True
-            logging.info("Text LLM 로드 완료")
-            return True
+            if self.mode == "api":
+                # API 모드: OpenAI-compatible API 클라이언트 사용
+                logging.info("Text LLM 로드 중 (API 모드)...")
+                try:
+                    from openai import OpenAI
+                except ImportError:
+                    logging.error("openai 패키지가 설치되지 않았습니다. pip install openai")
+                    return False
+                
+                base_url = self.api_config.get("base_url", "http://localhost:8000/v1")
+                api_key = self.api_config.get("api_key", "EMPTY")
+                
+                self.text_llm = OpenAI(
+                    base_url=base_url,
+                    api_key=api_key
+                )
+                # API 모드에서는 모델 이름 저장
+                self.text_model_name = self.api_config.get("text_model", "Qwen/Qwen3-8B")
+                self.text_loaded = True
+                logging.info(f"Text LLM API 연결 완료: {base_url}")
+                return True
+            else:
+                # Local 모드: llama.cpp 사용
+                from llama_cpp import Llama
+                
+                logging.info("Text LLM 로드 중 (Local 모드)...")
+                
+                if not os.path.exists(self.config["TEXT_MODEL_PATH"]):
+                    logging.error(f"모델 파일을 찾을 수 없습니다: {self.config['TEXT_MODEL_PATH']}")
+                    return False
+                
+                main_gpu = gpu_id if gpu_id is not None else self.config["MAIN_GPU"]
+                
+                self.text_llm = Llama(
+                    model_path=self.config["TEXT_MODEL_PATH"],
+                    n_gpu_layers=self.config["N_GPU_LAYERS"],
+                    n_ctx=self.config["N_CTX"],
+                    n_threads=self.config["N_THREADS"],
+                    n_batch=self.config["N_BATCH"],
+                    main_gpu=main_gpu,
+                    use_mmap=True,
+                    use_mlock=True,
+                    chat_format="chatml",
+                    verbose=False
+                )
+                self.text_loaded = True
+                logging.info("Text LLM 로드 완료 (Local 모드)")
+                return True
         except Exception as e:
             logging.error(f"Text LLM 로드 실패: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
             return False
     
     def load_all_models(self, gpu_id: int = None) -> bool:
@@ -336,11 +405,49 @@ class VideoAnalysisAgent:
             ]}
         ]
 
-        response = self.llm_manager.vision_llm.create_chat_completion(
-            messages=messages,
-            temperature=0.2,
-            max_tokens=80
-        )
+        # API 모드와 Local 모드 호환성 처리
+        if self.llm_manager.mode == "api":
+            # API 모드: OpenAI 클라이언트 사용
+            response = self.llm_manager.vision_llm.chat.completions.create(
+                model=self.llm_manager.vision_model_name,
+                messages=messages,
+                temperature=0.2,
+                max_tokens=512
+            )
+            # OpenAI 형식으로 변환
+            response = {
+                "choices": [{
+                    "message": {
+                        "content": response.choices[0].message.content
+                    }
+                }]
+            }
+        else:
+            # Local 모드: llama.cpp 사용
+            # API 모드와 Local 모드 호환성 처리
+        if self.llm_manager.mode == "api":
+            # API 모드: OpenAI 클라이언트 사용
+            response = self.llm_manager.vision_llm.chat.completions.create(
+                model=self.llm_manager.vision_model_name,
+                messages=messages,
+                temperature=0.2,
+                max_tokens=80
+            )
+            # OpenAI 형식으로 변환
+            response = {
+                "choices": [{
+                    "message": {
+                        "content": response.choices[0].message.content
+                    }
+                }]
+            }
+        else:
+            # Local 모드: llama.cpp 사용
+            response = self.llm_manager.vision_llm.create_chat_completion(
+                messages=messages,
+                temperature=0.2,
+                max_tokens=80
+            )
 
         return response['choices'][0]['message']['content'].strip()
     

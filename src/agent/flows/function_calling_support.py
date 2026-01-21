@@ -20,6 +20,16 @@ class FunctionCallingSupport:
         if e2e_system is not None:
             register_core_functions(self.registry, e2e_system)
             self._ready = True
+    
+    def _is_api_mode(self) -> bool:
+        """API 모드 여부 확인"""
+        return hasattr(self.llm_manager, 'mode') and self.llm_manager.mode == "api"
+    
+    def _get_model_name(self) -> str:
+        """모델 이름 가져오기 (API 모드)"""
+        if self._is_api_mode():
+            return getattr(self.llm_manager, 'text_model_name', 'Qwen/Qwen3-8B')
+        return None
 
     def set_e2e_system(self, e2e_system) -> None:
         self.e2e_system = e2e_system
@@ -66,21 +76,40 @@ class FunctionCallingSupport:
 
         try:
             # Function Calling 지원 래퍼 사용
+            is_api = self._is_api_mode()
+            model_name = self._get_model_name() if is_api else None
             response = create_chat_completion_with_tools(
                 self.llm_manager.text_llm,
                 messages=messages,
                 tools=self.registry.list_functions(),
                 tool_choice="auto",
+                model_name=model_name,
+                is_api_mode=is_api,
                 temperature=0.2,
                 max_tokens=512,
             )
         except Exception as exc:
             # Fallback: tools 없이 일반 호출
-            fallback = self.llm_manager.text_llm.create_chat_completion(
-                messages=messages,
-                temperature=0.2,
-                max_tokens=256,
-            )
+            if self._is_api_mode():
+                fallback = self.llm_manager.text_llm.chat.completions.create(
+                    model=self._get_model_name(),
+                    messages=messages,
+                    temperature=0.2,
+                    max_tokens=256,
+                )
+                fallback = {
+                    "choices": [{
+                        "message": {
+                            "content": fallback.choices[0].message.content
+                        }
+                    }]
+                }
+            else:
+                fallback = self.llm_manager.text_llm.create_chat_completion(
+                    messages=messages,
+                    temperature=0.2,
+                    max_tokens=256,
+                )
             content = fallback["choices"][0]["message"].get("content", "").strip()
             return {
                 "success": True,
@@ -136,11 +165,26 @@ class FunctionCallingSupport:
 
             try:
                 # Function Calling 결과를 바탕으로 최종 응답 생성
-                follow_up = self.llm_manager.text_llm.create_chat_completion(
-                    messages=messages,
-                    temperature=0.2,
-                    max_tokens=512,
-                )
+                if self._is_api_mode():
+                    follow_up = self.llm_manager.text_llm.chat.completions.create(
+                        model=self._get_model_name(),
+                        messages=messages,
+                        temperature=0.2,
+                        max_tokens=512,
+                    )
+                    follow_up = {
+                        "choices": [{
+                            "message": {
+                                "content": follow_up.choices[0].message.content
+                            }
+                        }]
+                    }
+                else:
+                    follow_up = self.llm_manager.text_llm.create_chat_completion(
+                        messages=messages,
+                        temperature=0.2,
+                        max_tokens=512,
+                    )
                 response_text = (
                     follow_up["choices"][0]["message"].get("content", "").strip()
                 )
