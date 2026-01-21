@@ -424,25 +424,6 @@ class VideoAnalysisAgent:
             }
         else:
             # Local 모드: llama.cpp 사용
-            # API 모드와 Local 모드 호환성 처리
-        if self.llm_manager.mode == "api":
-            # API 모드: OpenAI 클라이언트 사용
-            response = self.llm_manager.vision_llm.chat.completions.create(
-                model=self.llm_manager.vision_model_name,
-                messages=messages,
-                temperature=0.2,
-                max_tokens=80
-            )
-            # OpenAI 형식으로 변환
-            response = {
-                "choices": [{
-                    "message": {
-                        "content": response.choices[0].message.content
-                    }
-                }]
-            }
-        else:
-            # Local 모드: llama.cpp 사용
             response = self.llm_manager.vision_llm.create_chat_completion(
                 messages=messages,
                 temperature=0.2,

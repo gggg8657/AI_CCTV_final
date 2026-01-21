@@ -3,8 +3,10 @@ LLM Wrapper for Function Calling
 =================================
 
 llama.cpp의 create_chat_completion을 Function Calling 지원으로 래핑
+Local 모드와 API 모드 모두 지원
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
 
