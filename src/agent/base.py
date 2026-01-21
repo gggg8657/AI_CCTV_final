@@ -92,13 +92,33 @@ class LLMManager:
             cls._instance = super(LLMManager, cls).__new__(cls)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, config: Dict = None):
         if not self._initialized:
             self.vision_llm = None
             self.text_llm = None
             self.vision_loaded = False
             self.text_loaded = False
             self.config = DEFAULT_CONFIG.copy()
+            # 외부 config에서 모델 경로 업데이트
+            if config:
+                if "llm" in config:
+                    llm_config = config["llm"]
+                    if "text_model_path" in llm_config:
+                        self.config["TEXT_MODEL_PATH"] = llm_config["text_model_path"]
+                    if "vision_model_path" in llm_config:
+                        self.config["VISION_MODEL_PATH"] = llm_config["vision_model_path"]
+                    if "vision_mmproj_path" in llm_config:
+                        self.config["MM_PROJ_PATH"] = llm_config["vision_mmproj_path"]
+                    if "n_gpu_layers" in llm_config:
+                        self.config["N_GPU_LAYERS"] = llm_config["n_gpu_layers"]
+                    if "n_ctx" in llm_config:
+                        self.config["N_CTX"] = llm_config["n_ctx"]
+                    if "n_threads" in llm_config:
+                        self.config["N_THREADS"] = llm_config["n_threads"]
+                    if "n_batch" in llm_config:
+                        self.config["N_BATCH"] = llm_config["n_batch"]
+                if "gpu" in config and "device_id" in config["gpu"]:
+                    self.config["MAIN_GPU"] = config["gpu"]["device_id"]
             LLMManager._initialized = True
     
     def load_vision_llm(self, gpu_id: int = None) -> bool:

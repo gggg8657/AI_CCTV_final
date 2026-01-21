@@ -28,7 +28,7 @@ from .flows import (
 )
 
 
-def create_flow(flow_name: str, **kwargs):
+def create_flow(flow_name: str, config: dict = None, **kwargs):
     """
     Agent Flow 생성 팩토리
     
@@ -49,7 +49,7 @@ def create_flow(flow_name: str, **kwargs):
     if flow_name not in flows:
         raise ValueError(f"Unknown flow: {flow_name}. Available: {list(flows.keys())}")
     
-    return flows[flow_name](**kwargs)
+    return flows[flow_name](config=config, **kwargs)
 
 
 __all__ = [

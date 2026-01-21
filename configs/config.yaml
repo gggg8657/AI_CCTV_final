@@ -39,6 +39,22 @@ agent:
   enabled: true
   # Flow 종류: sequential, hierarchical, collaborative
   flow: sequential
+  # LLM 모델 경로 설정
+  llm:
+    # Text LLM 모델 경로 (Qwen3-8B GGUF)
+    text_model_path: "/data/DJ/models/Qwen3-8B-Q4_K_M.gguf"
+    # Vision LLM 모델 경로 (Qwen2.5-VL-7B GGUF)
+    vision_model_path: "/data/DJ/models/Qwen2.5-VL-7B-Instruct-q4_k_m.gguf"
+    # Vision LLM MM Projection 경로
+    vision_mmproj_path: "/data/DJ/models/Qwen2.5-VL-7B-Instruct-mmproj-f16.gguf"
+    # GPU 레이어 수 (-1 = 모두 GPU, 0 = CPU만)
+    n_gpu_layers: -1
+    # 컨텍스트 길이
+    n_ctx: 32768
+    # 스레드 수
+    n_threads: 16
+    # 배치 크기
+    n_batch: 512
 
 # 클립 저장 설정
 clip:

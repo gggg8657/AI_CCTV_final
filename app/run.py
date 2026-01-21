@@ -93,6 +93,15 @@ def merge_config_with_args(config: dict, args) -> dict:
         if "agent" in config:
             merged["enable_agent"] = config["agent"].get("enabled", merged["enable_agent"])
             merged["agent_flow"] = config["agent"].get("flow", merged["agent_flow"])
+            # LLM 모델 경로 설정
+            if "llm" in config["agent"]:
+                merged["agent_text_model_path"] = config["agent"]["llm"].get("text_model_path", "")
+                merged["agent_vision_model_path"] = config["agent"]["llm"].get("vision_model_path", "")
+                merged["agent_vision_mmproj_path"] = config["agent"]["llm"].get("vision_mmproj_path", "")
+                merged["agent_n_gpu_layers"] = config["agent"]["llm"].get("n_gpu_layers", -1)
+                merged["agent_n_ctx"] = config["agent"]["llm"].get("n_ctx", 32768)
+                merged["agent_n_threads"] = config["agent"]["llm"].get("n_threads", 16)
+                merged["agent_n_batch"] = config["agent"]["llm"].get("n_batch", 512)
         
         if "clip" in config:
             merged["save_clips"] = config["clip"].get("enabled", merged["save_clips"])
@@ -158,6 +167,14 @@ def run_cli(settings: dict):
         optimize_vlm=settings["optimize_vlm"],
         enable_agent=settings["enable_agent"],
         agent_flow=AgentFlowType(settings["agent_flow"]),
+        # LLM 모델 경로 설정
+        agent_text_model_path=settings.get("agent_text_model_path", ""),
+        agent_vision_model_path=settings.get("agent_vision_model_path", ""),
+        agent_vision_mmproj_path=settings.get("agent_vision_mmproj_path", ""),
+        agent_n_gpu_layers=settings.get("agent_n_gpu_layers", -1),
+        agent_n_ctx=settings.get("agent_n_ctx", 32768),
+        agent_n_threads=settings.get("agent_n_threads", 16),
+        agent_n_batch=settings.get("agent_n_batch", 512),
         save_clips=settings["save_clips"],
         clip_duration=settings["clip_duration"],
         clips_dir=settings["clips_dir"],
