@@ -938,9 +938,7 @@ class E2ESystem:
             try:
                 self.event_bus.start()
                 self.logger.log_info("EventBus started")
-                self.vad_event_handler = VADEventHandler(event_bus=self.event_bus)
-                self.vlm_event_handler = VLMEventHandler(event_bus=self.event_bus)
-                self.agent_event_handler = AgentEventHandler(event_bus=self.event_bus)
+                self._register_event_handlers()
             except Exception as e:
                 self.logger.log_warning(f"EventBus start failed: {e} (continuing without async event processing)")
         
@@ -969,12 +967,7 @@ class E2ESystem:
         # 이벤트 버스 중지
         if self.event_bus:
             try:
-                if self.vad_event_handler:
-                    self.vad_event_handler.unsubscribe()
-                if self.vlm_event_handler:
-                    self.vlm_event_handler.unsubscribe()
-                if self.agent_event_handler:
-                    self.agent_event_handler.unsubscribe()
+                self._unregister_event_handlers()
                 self.event_bus.stop()
                 self.logger.log_info("EventBus stopped")
             except Exception as e:
@@ -985,6 +978,33 @@ class E2ESystem:
         
         self.logger.log_info("E2E System stopped")
         self.logger.log_info(f"Final stats: {json.dumps(self.stats.to_dict())}")
+
+    def _register_event_handlers(self) -> None:
+        if not self.event_bus:
+            return
+
+        if self.vad_event_handler:
+            self.vad_event_handler.subscribe()
+        else:
+            self.vad_event_handler = VADEventHandler(event_bus=self.event_bus)
+
+        if self.vlm_event_handler:
+            self.vlm_event_handler.subscribe()
+        else:
+            self.vlm_event_handler = VLMEventHandler(event_bus=self.event_bus)
+
+        if self.agent_event_handler:
+            self.agent_event_handler.subscribe()
+        else:
+            self.agent_event_handler = AgentEventHandler(event_bus=self.event_bus)
+
+    def _unregister_event_handlers(self) -> None:
+        if self.vad_event_handler:
+            self.vad_event_handler.unsubscribe()
+        if self.vlm_event_handler:
+            self.vlm_event_handler.unsubscribe()
+        if self.agent_event_handler:
+            self.agent_event_handler.unsubscribe()
     
     def _process_loop(self):
         """메인 처리 루프 (최적화된 버전)"""
