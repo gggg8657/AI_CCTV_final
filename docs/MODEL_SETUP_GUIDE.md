@@ -4,6 +4,10 @@
 
 이 가이드는 AI_CCTV_final 프로젝트에서 사용하는 LLM 및 VLM 모델을 설치하고 연결하는 방법을 설명합니다.
 
+**지원 모드:**
+- **Local 모드**: llama.cpp를 사용하여 로컬에서 모델 실행
+- **API 모드**: OpenAI-compatible API를 사용하여 원격 서버에서 모델 실행
+
 ## 필요한 모델
 
 ### 1. Text LLM: Qwen3-8B
@@ -52,11 +56,17 @@ python convert.py --outfile Qwen3-8B-Q4_K_M.gguf --outtype q4_k_m /path/to/origi
 
 `configs/config.yaml` 파일을 열고 모델 경로를 설정합니다:
 
+#### Local 모드 설정
+
 ```yaml
 agent:
   enabled: true
   flow: sequential
   llm:
+    # 모드 선택: "local" 또는 "api"
+    mode: "local"
+    
+    # Local 모드 설정 (llama.cpp)
     # Text LLM 모델 경로
     text_model_path: "/path/to/Qwen3-8B-Q4_K_M.gguf"
     
@@ -73,6 +83,28 @@ agent:
     n_batch: 512      # 배치 크기
 ```
 
+#### API 모드 설정
+
+```yaml
+agent:
+  enabled: true
+  flow: sequential
+  llm:
+    # 모드 선택: "local" 또는 "api"
+    mode: "api"
+    
+    # API 모드 설정 (OpenAI-compatible API)
+    api:
+      # API Base URL
+      base_url: "http://localhost:8000/v1"  # 또는 "https://api.openai.com/v1"
+      # API Key (필요시)
+      api_key: "EMPTY"  # 또는 실제 API 키
+      # Text LLM 모델 이름
+      text_model: "Qwen/Qwen3-8B"
+      # Vision LLM 모델 이름
+      vision_model: "Qwen/Qwen2.5-VL-7B"
+```
+
 ### 2. 환경 변수 설정 (선택)
 
 `.env` 파일을 생성하여 환경 변수로도 설정 가능:
@@ -85,9 +117,10 @@ AGENT_VISION_MMPROJ_PATH=/path/to/Qwen2.5-VL-7B-Instruct-mmproj-f16.gguf
 
 ## 의존성 설치
 
-### llama-cpp-python 설치
+### Local 모드 의존성
 
 ```bash
+# llama-cpp-python 설치
 # 기본 설치
 pip install llama-cpp-python
 
@@ -98,11 +131,20 @@ CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python
 CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python
 ```
 
+### API 모드 의존성
+
+```bash
+# OpenAI-compatible API 클라이언트
+pip install openai>=1.0.0
+```
+
 ### 전체 의존성 설치
 
 ```bash
 pip install -r requirements.txt
 ```
+
+**참고**: Local 모드와 API 모드 모두 사용하려면 두 의존성 모두 설치해야 합니다.
 
 ## 연결 확인
 
@@ -124,12 +166,15 @@ assert mmproj.exists(), f"MMProj not found: {mmproj}"
 
 ### 2. LLM 로드 테스트
 
+#### Local 모드 테스트
+
 ```python
 from src.agent.base import LLMManager
 
-# Config 준비
+# Config 준비 (Local 모드)
 config = {
     "llm": {
+        "mode": "local",
         "text_model_path": "/path/to/Qwen3-8B-Q4_K_M.gguf",
         "vision_model_path": "/path/to/Qwen2.5-VL-7B-Instruct-q4_k_m.gguf",
         "vision_mmproj_path": "/path/to/Qwen2.5-VL-7B-Instruct-mmproj-f16.gguf",
@@ -147,17 +192,52 @@ config = {
 llm_manager = LLMManager(config=config)
 
 # 모델 로드
-print("Loading Text LLM...")
+print("Loading Text LLM (Local mode)...")
 if llm_manager.load_text_llm():
     print("✓ Text LLM loaded successfully")
 else:
     print("✗ Text LLM load failed")
 
-print("Loading Vision LLM...")
+print("Loading Vision LLM (Local mode)...")
 if llm_manager.load_vision_llm():
     print("✓ Vision LLM loaded successfully")
 else:
     print("✗ Vision LLM load failed")
+```
+
+#### API 모드 테스트
+
+```python
+from src.agent.base import LLMManager
+
+# Config 준비 (API 모드)
+config = {
+    "llm": {
+        "mode": "api",
+        "api": {
+            "base_url": "http://localhost:8000/v1",
+            "api_key": "EMPTY",
+            "text_model": "Qwen/Qwen3-8B",
+            "vision_model": "Qwen/Qwen2.5-VL-7B",
+        }
+    }
+}
+
+# LLMManager 초기화
+llm_manager = LLMManager(config=config)
+
+# 모델 로드
+print("Loading Text LLM (API mode)...")
+if llm_manager.load_text_llm():
+    print("✓ Text LLM API connected successfully")
+else:
+    print("✗ Text LLM API connection failed")
+
+print("Loading Vision LLM (API mode)...")
+if llm_manager.load_vision_llm():
+    print("✓ Vision LLM API connected successfully")
+else:
+    print("✗ Vision LLM API connection failed")
 ```
 
 ### 3. Function Calling 테스트
@@ -181,29 +261,42 @@ if system.agent and system.agent.flow:
 
 ## 문제 해결
 
-### 모델 파일을 찾을 수 없음
+### Local 모드 문제
 
+#### 모델 파일을 찾을 수 없음
 - 경로가 올바른지 확인
 - 절대 경로 사용 권장
 - 파일 권한 확인
 
-### GPU 메모리 부족
-
+#### GPU 메모리 부족
 - `n_gpu_layers`를 줄이기 (예: 20)
 - 배치 크기 줄이기 (`n_batch`: 256)
 - 더 작은 양자화 모델 사용 (Q3_K_M, Q2_K)
 
-### llama-cpp-python 설치 실패
-
+#### llama-cpp-python 설치 실패
 - Python 버전 확인 (3.9+ 권장)
 - CMake 설치 확인
 - GPU 드라이버 확인 (CUDA/Metal)
 
-### Function Calling이 작동하지 않음
+### API 모드 문제
 
+#### API 연결 실패
+- `base_url`이 올바른지 확인
+- API 서버가 실행 중인지 확인
+- 네트워크 연결 확인
+- `api_key`가 필요한 경우 올바른 키 사용
+
+#### 모델 이름 오류
+- API 서버에서 지원하는 모델 이름 확인
+- `text_model`과 `vision_model` 설정 확인
+
+### 공통 문제
+
+#### Function Calling이 작동하지 않음
 - Text LLM이 올바르게 로드되었는지 확인
 - Qwen3 모델인지 확인 (Qwen2는 Function Calling 미지원)
 - `tools` 파라미터가 올바르게 전달되는지 확인
+- API 모드: API 서버가 Function Calling을 지원하는지 확인
 
 ## 권장 모델 경로 구조
 
