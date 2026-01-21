@@ -140,7 +140,7 @@ Always respond in Korean
 
 ## 0) Purpose
 - Repo별 Conda 환경이 다른 상황에서도, 실행/재현/검증이 가능한 개발/연구 워크플로우를 강제한다.
-- 코딩 작업은 Codex CLI를 "초안 생성기"로 사용하고, 본 에이전트(Cursor)는 최종 품질과 재현성(테스트/스모크)을 보장한다.
+- **Cursor가 맥락을 파악하고 개발을 주도**하며, Codex CLI는 **개발 보조 역할**로 사용한다.
 - 조사/팩트체크/최신 확인은 Perplexity MCP를 사용하며, 출처 기반으로만 결론을 내린다.
 - 모든 답변은 실행 가능한 다음 액션(I propose...)를 포함한다.
 
@@ -197,39 +197,51 @@ Preflight 정보가 없으면:
 
 ## 2) Codex CLI 협업 규약 (코딩/개발 작업)
 ### 2.1 Codex와 Cursor의 협업 관계
-- **Codex**: 코드 초안 생성기 (패치 생성)
-- **Cursor**: 검수자 및 통합자 (품질 보장, 테스트, 문서화)
-- **협업 방식**: 순환형 대화를 통한 반복적 개선
-  - Cursor → Codex: 초안 요청 또는 수정 요청
-  - Codex → Cursor: 패치 제공
-  - Cursor → Codex: 피드백 및 추가 수정 요청
-  - 반복하여 품질 향상
+- **Cursor**: 맥락 파악 및 개발 주도 (전체 흐름 이해, 설계, 구현, 통합)
+- **Codex**: 개발 보조 (특정 부분의 코드 생성, 반복적인 패턴 작성)
+- **협업 방식**: Cursor가 주도하고 Codex가 보조
+  - Cursor가 맥락을 파악하고 설계/구현 방향 결정
+  - Cursor가 직접 개발하거나, 필요시 Codex에 특정 부분 요청
+  - Codex → Cursor: 요청된 부분의 코드 제공
+  - Cursor가 Codex 출력을 검토하고 통합/수정
 
 ### 2.2 협업 워크플로우
 ```
 1. [정보 수집] Perplexity로 관련 정보 조사 (사전 조사)
    ↓
-2. [초안 생성] Cursor → Codex: "이렇게 만들어주세요"
+2. [맥락 파악] Cursor가 전체 맥락 파악 및 설계
    ↓
-3. [검토 및 피드백] Cursor가 Codex 출력 검토
+3. [개발 주도] Cursor가 직접 개발 (기본)
+   - 필요시 Codex에 특정 부분 요청 (선택적)
+   - Cursor → Codex: "이 부분만 만들어주세요" (반복적인 패턴, 긴 코드 등)
    ↓
-4. [수정 요청] Cursor → Codex: "이 부분 수정해주세요" (필요시)
+4. [코드 제공] Codex → Cursor: 요청된 부분의 코드 제공 (있는 경우)
    ↓
-5. [수정본 제공] Codex → Cursor: "수정했습니다"
+5. [통합 및 검증] Cursor가 코드 통합, 테스트, 문서화
    ↓
 6. [반복] 3-5 반복 (필요시)
    ↓
-7. [최종 통합] Cursor가 테스트/문서화/통합 완료
+7. [최종 완성] Cursor가 최종 통합 및 검증 완료
 ```
 
-### 2.3 협업 종료 조건
+### 2.3 Codex 사용 원칙
+- **기본**: Cursor가 직접 개발
+- **Codex 사용 시점**: 
+  - 반복적인 패턴 작성이 필요한 경우
+  - 긴 코드 블록 생성이 필요한 경우
+  - 사용자가 명시적으로 Codex 사용을 요청한 경우
+- **Codex 미사용**: 일반적인 개발 작업은 Cursor가 직접 수행
+
+### 2.4 협업 종료 조건
 - **협업 종료**: 모듈 테스트들이 완수되면 종료
 - 테스트 통과, 문서화 완료, 기존 코드와 통합 완료 시점
 - 사용자가 명시적으로 "완료" 요청 시에도 종료 가능
 
-### 2.4 Codex는 "패치 생성기", Cursor는 "검수자"
-- Codex의 출력은 기본적으로 unified diff(패치) 형태를 요구한다.
-- Cursor는 패치를 적용하기 전후로 재현/검증 커맨드를 제시하고, 리스크를 평가한다.
+### 2.4 Cursor는 "개발 주도자", Codex는 "개발 보조"
+- Cursor가 전체 맥락을 파악하고 개발을 주도한다.
+- Codex는 Cursor가 요청한 특정 부분의 코드만 생성한다 (선택적 사용).
+- Codex의 출력은 unified diff(패치) 형태를 선호하지만, Cursor가 직접 개발하는 것이 기본이다.
+- Cursor는 코드를 직접 작성하고, 필요시 Codex 출력을 참고하여 통합한다.
 
 ### 2.2 Codex 입력 프롬프트 표준(구조화 강제)
 Codex 호출 시 항상 아래 섹션을 포함한다:
@@ -405,18 +417,23 @@ Codex CLI 호출 시 다음 정보를 채팅창에 표시:
 Always respond in Korean
 
 ## 1) Codex CLI 자동 트리거 조건 (문장 트리거 없이도 발동)
-아래 중 하나라도 해당하면, 사용자가 명시하지 않아도 Codex CLI 협업을 사용한다.
+**기본 원칙**: Cursor가 직접 개발하는 것이 기본이며, Codex는 선택적으로 사용한다.
 
-### Codex Gate A: Code-change required
-- 사용자의 요청이 "코드 변경"을 요구하거나 암시하면 Codex를 호출한다.
-  - 예: bug fix, refactor, add feature, optimize, write script, implement module
-  - 예: "에러 해결", "이거 고쳐", "리팩터링", "속도 개선", "모듈 추가"
+### Codex Gate A: 반복적인 패턴 작성
+- 동일한 패턴의 코드를 여러 개 작성해야 할 때 Codex를 사용한다.
+  - 예: 여러 테스트 케이스 작성, 유사한 함수 여러 개 생성
 
-### Codex Gate B: Patch/diff is the best output
-- 최종 산출물이 코드/패치/설정 변경일 때는 Codex를 사용한다.
+### Codex Gate B: 긴 코드 블록 생성
+- 매우 긴 코드 블록(100줄 이상)을 생성해야 할 때 Codex를 사용한다.
+  - 예: 대규모 클래스 구현, 긴 스크립트 작성
 
-### Codex Gate C: Non-trivial code reasoning
-- 로직이 복잡하거나(멀티프로세스/분산/비동기/성능), 수정 범위가 넓을 가능성이 있으면 Codex를 사용한다.
+### Codex Gate C: 사용자 명시적 요청
+- 사용자가 "Codex로", "Codex 사용" 등으로 명시적으로 요청한 경우
+
+### Codex 미사용 원칙
+- 일반적인 코드 수정/추가: Cursor가 직접 수행
+- 작은 변경사항: Cursor가 직접 수행
+- 기존 코드 수정: Cursor가 직접 수행
 
 #### Codex 호출 원칙(고정)
 - diff-only (unified diff)
@@ -484,15 +501,16 @@ Perplexity MCP가 사용 불가능하거나 오류가 발생할 때:
 
 ---
 
-## 3) 복합 요청 처리 규칙 (Perplexity + Codex ↔ Cursor 협업)
+## 3) 복합 요청 처리 규칙 (Perplexity + Cursor 주도 개발)
 - "개발 + 스펙 확인"이 섞인 경우:
   1) **Perplexity로 사실/스펙을 먼저 확정** (사전 조사)
-     - Perplexity 사용 불가 시: Cursor가 스스로 조사 또는 Codex에게 정보 요청
-  2) 확정된 스펙을 Codex 입력으로 주입
-  3) **Codex ↔ Cursor 순환형 협업** 시작
-  4) 협업 중 추가 정보 필요 시:
+     - Perplexity 사용 불가 시: Cursor가 스스로 조사
+  2) **Cursor가 맥락 파악 및 설계**
+  3) **Cursor가 직접 개발** (기본)
+     - 필요시 Codex에 특정 부분 요청 (선택적)
+  4) 개발 중 추가 정보 필요 시:
      - Perplexity 재호출 시도 (가능한 경우)
-     - Perplexity 사용 불가 시: Cursor가 스스로 조사 또는 Codex에게 정보 요청
+     - Perplexity 사용 불가 시: Cursor가 스스로 조사
   5) 모듈 테스트 완수까지 반복
   6) Cursor가 최종 통합/검증
 
@@ -505,17 +523,15 @@ Perplexity MCP가 사용 불가능하거나 오류가 발생할 때:
 ```
 [Perplexity] 이벤트 버스 패턴 조사
   ↓
-[Cursor → Codex #1] "이벤트 버스 클래스 생성"
+[Cursor] 맥락 파악 및 설계
   ↓
-[Codex → Cursor #1] diff 패치 제공
+[Cursor] 이벤트 버스 클래스 직접 개발
   ↓
-[Cursor Feedback #1] "에러 처리 추가 필요"
+[Cursor → Codex #1] "테스트 케이스 여러 개 생성" (선택적)
   ↓
-[Cursor → Codex #2] "에러 처리 추가"
+[Codex → Cursor #1] 테스트 코드 제공 (있는 경우)
   ↓
-[Codex → Cursor #2] 수정된 패치 제공
-  ↓
-[Cursor] 테스트 작성 및 통과 확인
+[Cursor] 테스트 통합 및 통과 확인
   ↓
 [완료] 모듈 테스트 완수
 ```
