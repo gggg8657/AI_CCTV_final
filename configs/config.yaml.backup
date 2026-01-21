@@ -1,0 +1,101 @@
+# E2E Security Monitoring System Configuration
+# =============================================
+
+# 비디오 소스 설정
+video:
+  # 소스 타입: file, rtsp, webcam
+  source_type: file
+  # 소스 경로 (파일 경로, RTSP URL, 또는 웹캠 인덱스)
+  source_path: "/path/to/video.mp4"
+  # 타겟 FPS
+  target_fps: 30
+  # 디스플레이 해상도
+  display_width: 640
+  display_height: 480
+
+# VAD 모델 설정
+vad:
+  # 모델 종류: mnad, mulde, memae, stae
+  model: mnad
+  # 이상 탐지 임계값 (0.0 ~ 1.0)
+  threshold: 0.5
+  # 체크포인트 경로 (비어있으면 기본값 사용)
+  checkpoint_path: ""
+
+# VLM 설정
+vlm:
+  # VLM 활성화 여부
+  enabled: true
+  # 분석에 사용할 프레임 수
+  n_frames: 4
+  # 모델 경로 (비어있으면 기본값 사용)
+  model_path: ""
+  # 속도 최적화 모드
+  optimize: true
+
+# Agent 설정
+agent:
+  # Agent 활성화 여부
+  enabled: true
+  # Flow 종류: sequential, hierarchical, collaborative
+  flow: sequential
+  # LLM 모델 경로 설정
+  llm:
+    # 사용 방식: "local" (llama.cpp) 또는 "api" (OpenAI-compatible API)
+    mode: "local"  # "local" 또는 "api"
+    
+    # Local 모드 설정 (llama.cpp)
+    # Text LLM 모델 경로 (Qwen3-8B GGUF)
+    text_model_path: "/data/DJ/models/Qwen3-8B-Q4_K_M.gguf"
+    # Vision LLM 모델 경로 (Qwen2.5-VL-7B GGUF)
+    vision_model_path: "/data/DJ/models/Qwen2.5-VL-7B-Instruct-q4_k_m.gguf"
+    # Vision LLM MM Projection 경로
+    vision_mmproj_path: "/data/DJ/models/Qwen2.5-VL-7B-Instruct-mmproj-f16.gguf"
+    # GPU 레이어 수 (-1 = 모두 GPU, 0 = CPU만)
+    n_gpu_layers: -1
+    # 컨텍스트 길이
+    n_ctx: 32768
+    # 스레드 수
+    n_threads: 16
+    # 배치 크기
+    n_batch: 512
+    
+    # API 모드 설정 (OpenAI-compatible API)
+    api:
+      # API Base URL (예: "http://localhost:8000/v1" 또는 "https://api.openai.com/v1")
+      base_url: "http://localhost:8000/v1"
+      # API Key (필요시)
+      api_key: "EMPTY"
+      # Text LLM 모델 이름 (API에서 사용할 모델 이름)
+      text_model: "Qwen/Qwen3-8B"
+      # Vision LLM 모델 이름
+      vision_model: "Qwen/Qwen2.5-VL-7B"
+
+# 클립 저장 설정
+clip:
+  # 클립 저장 활성화
+  enabled: true
+  # 클립 길이 (초)
+  duration: 3.0
+  # 클립 저장 디렉토리
+  directory: clips
+
+# 로깅 설정
+logging:
+  # 로그 디렉토리
+  directory: logs
+  # 로그 레벨: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+
+# GPU 설정
+gpu:
+  # 사용할 GPU ID
+  device_id: 2
+
+# UI 설정
+ui:
+  # 기본 UI 모드: cli, web
+  default_mode: cli
+  # Web UI 포트
+  web_port: 8501
+
