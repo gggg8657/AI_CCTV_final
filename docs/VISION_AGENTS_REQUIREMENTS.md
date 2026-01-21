@@ -237,95 +237,104 @@ Vision-Agents의 Security Camera Example을 참고하여 현재 AI_CCTV_final �
   - 실행 오류
   - 권한 오류
 
-### 2.3 얼굴 인식 기능 (FR-021 ~ FR-030)
+### 2.3 패키지 감지 기능 (FR-021 ~ FR-030)
 
-#### FR-021: 얼굴 감지
-- **우선순위**: P1
-- **설명**: 비디오 프레임에서 얼굴 감지
-- **모델**: InsightFace 또는 FaceNet
-- **정확도**: > 95%
-- **처리 속도**: < 50ms per frame
+**참고**: 얼굴 인식 기능은 제외됨
 
-#### FR-022: 얼굴 임베딩 생성
+#### FR-021: 패키지 감지
 - **우선순위**: P1
-- **설명**: 감지된 얼굴에서 임베딩 벡터 생성
-- **차원**: 512 또는 128
-- **용도**: 얼굴 비교 및 인식
+- **설명**: YOLO v12 nano를 통한 패키지 객체 감지
+- **모델**: YOLO v12 nano (yolo12n.pt)
+- **커스텀 학습**: 불필요 (COCO 클래스 활용)
+- **정확도**: > 90%
+- **처리 속도**: < 100ms per frame
 
-#### FR-023: 얼굴 데이터베이스
+#### FR-022: 패키지 추적
 - **우선순위**: P1
-- **설명**: 등록된 얼굴 임베딩 저장
-- **저장소**: SQLite 또는 PostgreSQL
+- **설명**: 감지된 패키지의 위치 및 상태 추적
+- **기능**:
+  - 패키지 ID 할당
+  - 위치 추적 (bbox)
+  - 시간 추적
+
+#### FR-023: 패키지 데이터베이스
+- **우선순위**: P1
+- **설명**: 패키지 감지 이력 저장
+- **저장소**: SQLite
 - **스키마**:
   ```sql
-  CREATE TABLE faces (
-      face_id TEXT PRIMARY KEY,
-      name TEXT,
-      embedding BLOB,
-      registered_at TIMESTAMP,
-      last_seen TIMESTAMP
+  CREATE TABLE packages (
+      package_id TEXT PRIMARY KEY,
+      first_seen TEXT NOT NULL,
+      last_seen TEXT NOT NULL,
+      detection_count INTEGER DEFAULT 0,
+      confidence REAL,
+      picked_up_by TEXT,
+      status TEXT
   )
   ```
 
-#### FR-024: 얼굴 인식
+#### FR-024: 도난 감지 로직
 - **우선순위**: P1
-- **설명**: 감지된 얼굴을 데이터베이스와 비교하여 인식
-- **임계값**: 코사인 유사도 > 0.6
-- **처리 시간**: < 100ms
+- **설명**: 패키지가 사라질 때 도난 여부 판단
+- **로직**:
+  1. 패키지 사라짐 감지
+  2. 3초 대기
+  3. 재등장 여부 확인
+  4. 재등장 없으면 도난 판정
 
-#### FR-025: 얼굴 추적 (30분 윈도우)
+#### FR-025: PackageDetectedEvent
 - **우선순위**: P1
-- **설명**: 30분 시간 윈도우 내 얼굴 추적
-- **기능**:
-  - 같은 사람 재감지 시 카운트 증가
-  - 30분 경과 시 새 방문자로 처리
-  - 방문자 통계 관리
-
-#### FR-026: PersonDetectedEvent
-- **우선순위**: P1
-- **설명**: 새로운 사람 감지 또는 재방문 시 이벤트 발행
+- **설명**: 패키지 감지 시 이벤트 발행
 - **속성**:
-  - `face_id: str`
+  - `package_id: str`
   - `is_new: bool`
-  - `name: Optional[str]`
-  - `detection_count: int`
+  - `confidence: float`
+  - `bbox: Tuple[int, int, int, int]`
   - `timestamp: datetime`
 
-#### FR-027: PersonDisappearedEvent
+#### FR-026: PackageDisappearedEvent
 - **우선순위**: P1
-- **설명**: 사람이 프레임에서 사라질 때 이벤트 발행
+- **설명**: 패키지 사라짐 시 이벤트 발행
 - **속성**:
-  - `face_id: str`
-  - `name: Optional[str]`
-  - `last_seen: datetime`
+  - `package_id: str`
+  - `picker_face_id: Optional[str]`
+  - `timestamp: datetime`
 
-#### FR-028: 얼굴 등록 함수
+#### FR-027: TheftDetectedEvent
 - **우선순위**: P1
-- **함수명**: `remember_my_face(name: str)`
-- **설명**: 현재 프레임의 얼굴을 이름과 함께 등록
-- **파라미터**: `name` (str)
-- **반환값**: 성공 여부 및 face_id
+- **설명**: 도난 판정 시 이벤트 발행
+- **속성**:
+  - `package_id: str`
+  - `suspect_face_id: Optional[str]`
+  - `timestamp: datetime`
 
-#### FR-029: 방문자 수 조회 함수
+#### FR-028: 패키지 통계 함수
 - **우선순위**: P1
-- **함수명**: `get_visitor_count()`
-- **설명**: 지난 30분간 고유 방문자 수 조회
+- **함수명**: `get_package_count()`
+- **설명**: 패키지 통계 조회
 - **반환값**:
   ```python
   {
-      "unique_visitors": 5,
-      "total_detections": 12,
-      "time_window": "30 minutes"
+      "currently_visible": 2,
+      "total_seen": 15,
+      "stolen_count": 3
   }
   ```
 
-#### FR-030: 방문자 상세 정보 함수
+#### FR-029: 패키지 상세 정보 함수
 - **우선순위**: P1
-- **함수명**: `get_visitor_details()`
-- **설명**: 모든 방문자의 상세 정보 조회
-- **반환값**: 방문자 리스트
+- **함수명**: `get_package_details()`
+- **설명**: 모든 패키지의 상세 정보 조회
+- **반환값**: 패키지 리스트
 
-### 2.4 패키지 감지 기능 (FR-031 ~ FR-040)
+#### FR-030: 활동 로그 함수
+- **우선순위**: P1
+- **함수명**: `get_activity_log(limit: int = 20)`
+- **설명**: 최근 활동 로그 조회
+- **반환값**: 활동 이벤트 리스트
+
+### 2.4 음성 인터랙션 기능 (FR-031 ~ FR-035, 선택)
 
 #### FR-031: 패키지 감지
 - **우선순위**: P1
@@ -419,9 +428,36 @@ Vision-Agents의 Security Camera Example을 참고하여 현재 AI_CCTV_final �
 - **설명**: 최근 활동 로그 조회
 - **반환값**: 활동 이벤트 리스트
 
-### 2.5 음성 인터랙션 (선택, FR-041 ~ FR-045)
+### 2.5 데이터베이스 기능 (FR-036 ~ FR-040)
 
-#### FR-041: STT 통합
+#### FR-036: 데이터베이스 초기화
+- **우선순위**: P1
+- **설명**: SQLite 데이터베이스 및 스키마 생성
+- **위치**: `data/system.db`
+
+#### FR-037: 이벤트 저장
+- **우선순위**: P1
+- **설명**: 모든 이벤트를 데이터베이스에 저장
+- **테이블**: `events`
+
+#### FR-038: 패키지 저장/업데이트
+- **우선순위**: P1
+- **설명**: 패키지 정보를 데이터베이스에 저장/업데이트
+- **테이블**: `packages`
+
+#### FR-039: 이벤트 조회
+- **우선순위**: P1
+- **설명**: 데이터베이스에서 이벤트 조회
+- **기능**: 타입별, 시간별 필터링
+
+#### FR-040: 패키지 조회
+- **우선순위**: P1
+- **설명**: 데이터베이스에서 패키지 정보 조회
+- **기능**: 상태별, 시간별 필터링
+
+### 2.6 음성 인터랙션 기능 (FR-041 ~ FR-045, 선택)
+
+**조건**: Agent와 연동되는 경우에만 구현
 - **우선순위**: P2
 - **설명**: 음성을 텍스트로 변환
 - **옵션**: Deepgram 또는 Fast-Whisper
@@ -499,12 +535,16 @@ Vision-Agents의 Security Camera Example을 참고하여 현재 AI_CCTV_final �
 - CUDA 11.8+ (GPU 사용 시)
 - PyTorch 2.0+
 - OpenCV 4.8+
+- Ultralytics YOLO (YOLO v12 nano)
+- SQLite 3.x
 
 ### 4.3 외부 서비스 요구사항 (선택)
 
-- **Deepgram API** (STT 사용 시)
-- **ElevenLabs API** (TTS 사용 시)
-- **GetStream 계정** (WebRTC 사용 시)
+- **Deepgram API** (STT 사용 시, 선택)
+- **ElevenLabs API** (TTS 사용 시, 선택)
+- **GetStream 계정** (WebRTC 사용 시, 선택)
+  - 무료 티어: $100/월 크레딧, 66,000분 HD 무료
+  - Makers 프로그램: <5명 팀, <$10k 월 수익이면 무료
 
 ---
 
@@ -652,45 +692,37 @@ CREATE INDEX idx_packages_last_seen ON packages(last_seen);
 
 ## 9. 질문 및 검토 사항
 
-### 9.1 기술적 질문
+### 9.1 기술적 질문 (해결됨)
 
-1. **얼굴 인식 모델 선택**
-   - InsightFace vs FaceNet vs 기타?
-   - 정확도 vs 속도 트레이드오프?
+1. ~~얼굴 인식 모델 선택~~ → **제외됨**
 
-2. **패키지 감지 모델**
-   - YOLOv11 vs YOLOv8?
-   - 커스텀 모델 학습 필요 여부?
+2. ~~패키지 감지 모델~~ → **YOLO v12 nano 사용, 커스텀 학습 불필요**
 
 3. **음성 인터랙션 필요성**
-   - 실제 사용 사례가 있는가?
-   - 비용 대비 효과는?
+   - Agent와 연동되는 경우에만 구현
+   - 실제 사용 사례 확인 필요
 
 4. **WebRTC 실시간 처리**
-   - GetStream 계정 및 비용 부담?
-   - 현재 RTSP 처리로 충분한가?
+   - GetStream 무료 티어 있음 ($100/월 크레딧)
+   - 현재 RTSP 처리로 충분한지 확인 필요
 
-### 9.2 우선순위 질문
+### 9.2 우선순위 질문 (해결됨)
 
-1. **Phase 1 (이벤트 시스템)부터 시작할지?**
-   - ✅ 권장: 기반 구조 개선
+1. **Phase 1 (이벤트 시스템)부터 시작할지?** → **✅ 시작**
 
-2. **얼굴 인식과 패키지 감지 중 어느 것을 먼저?**
-   - 얼굴 인식 권장: 더 범용적
+2. ~~얼굴 인식과 패키지 감지 중 어느 것을 먼저?~~ → **얼굴 인식 제외, 패키지 감지만 구현**
 
-3. **음성 인터랙션은 필수인가?**
-   - 선택 사항으로 분류
+3. **음성 인터랙션은 필수인가?** → **선택 사항, Agent와 연동 시 구현**
 
-### 9.3 검토 필요 사항
+### 9.3 검토 필요 사항 (해결됨)
 
 1. **기존 Agent 시스템과의 통합 방식**
    - Function Calling을 Agent Flow에 통합하는 방법
+   - **검토 필요**: 구현 시 상세 설계
 
-2. **데이터베이스 선택**
-   - SQLite (간단) vs PostgreSQL (확장성)
+2. ~~데이터베이스 선택~~ → **SQLite 선택 (간단하게)**
 
-3. **이벤트 저장 방식**
-   - 메모리만 vs 파일 저장 vs 데이터베이스
+3. ~~이벤트 저장 방식~~ → **데이터베이스 저장 (SQLite)**
 
 ---
 
