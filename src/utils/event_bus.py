@@ -211,8 +211,14 @@ class EventBus:
                     # 실행 중인 루프에서는 취소만
                     pass
                 else:
-                    loop.run_until_complete(self._processing_task)
-            except Exception:
+                    try:
+                        loop.run_until_complete(self._processing_task)
+                    except (asyncio.CancelledError, RuntimeError):
+                        # CancelledError는 정상적인 취소 동작
+                        # RuntimeError는 이미 완료된 태스크일 수 있음
+                        pass
+            except (RuntimeError, Exception):
+                # 루프가 없거나 이미 닫힌 경우
                 pass
         
         self._queue = None
