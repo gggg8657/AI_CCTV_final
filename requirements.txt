@@ -20,15 +20,15 @@ llama-cpp-python>=0.2.0
 streamlit>=1.28.0
 rich>=13.7.0
 
-# API (추가 예정)
-# fastapi>=0.100.0
-# uvicorn>=0.23.0
-# websockets>=11.0.0
+# API
+fastapi>=0.100.0
+uvicorn>=0.23.0
+websockets>=11.0.0
 
-# Database (추가 예정)
-# sqlalchemy>=2.0.0
-# psycopg2-binary>=2.9.0
-# alembic>=1.12.0
+# Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+alembic>=1.12.0
 
 # Utilities
 pyyaml>=6.0
