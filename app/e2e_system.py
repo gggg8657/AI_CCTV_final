@@ -673,9 +673,10 @@ class VLMWrapper:
 class AgentWrapper:
     """Agent 시스템 래퍼 - sci_v2의 실제 Agent 사용"""
     
-    def __init__(self, flow_type: AgentFlowType, gpu_id: int = 0):
+    def __init__(self, flow_type: AgentFlowType, gpu_id: int = 0, e2e_system=None):
         self.flow_type = flow_type
         self.gpu_id = gpu_id
+        self.e2e_system = e2e_system
         self.flow = None
         self._loaded = False
     
@@ -693,7 +694,7 @@ class AgentWrapper:
             flow_name = self.flow_type.value  # "sequential", "hierarchical", "collaborative"
             
             # 실제 Agent Flow 생성
-            self.flow = create_flow(flow_name, gpu_id=self.gpu_id)
+            self.flow = create_flow(flow_name, gpu_id=self.gpu_id, e2e_system=self.e2e_system)
             
             if self.flow:
                 # 초기화 (llama.cpp 모델 로드 포함)
@@ -934,7 +935,7 @@ class E2ESystem:
         # Agent 초기화 (선택적)
         if self.config.enable_agent:
             try:
-                self.agent = AgentWrapper(self.config.agent_flow, self.config.gpu_id)
+                self.agent = AgentWrapper(self.config.agent_flow, self.config.gpu_id, e2e_system=self)
                 if self.agent.load():
                     self.logger.log_info(f"Agent loaded: {self.config.agent_flow.value}")
                 else:
