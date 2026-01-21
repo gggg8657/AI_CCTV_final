@@ -18,6 +18,7 @@ from ..base import (
     ActorAgent,
     VideoAnalysisState,
 )
+from .function_calling_support import FunctionCallingSupport
 
 
 class SequentialFlow:
@@ -32,14 +33,16 @@ class SequentialFlow:
     - 가장 빠른 처리
     """
     
-    def __init__(self, gpu_id: int = 2):
+    def __init__(self, gpu_id: int = 2, e2e_system=None):
         self.gpu_id = gpu_id
+        self.e2e_system = e2e_system
         self.llm_manager = None
         self._initialized = False
         
         self.video_analysis_agent = None
         self.planner_agent = None
         self.actor_agent = None
+        self.function_calling = None
     
     def initialize(self) -> bool:
         """Flow 초기화"""
@@ -63,10 +66,30 @@ class SequentialFlow:
         self.video_analysis_agent = VideoAnalysisAgent(self.llm_manager)
         self.planner_agent = PlannerAgent(self.llm_manager)
         self.actor_agent = ActorAgent(self.llm_manager)
+
+        # Function Calling 초기화
+        self.function_calling = FunctionCallingSupport(self.llm_manager, self.e2e_system)
         
         self._initialized = True
         print("[SequentialFlow] 초기화 완료")
         return True
+
+    def set_e2e_system(self, e2e_system) -> None:
+        """E2ESystem 연결"""
+        self.e2e_system = e2e_system
+        if self.function_calling is None:
+            self.function_calling = FunctionCallingSupport(self.llm_manager, e2e_system)
+        else:
+            self.function_calling.set_e2e_system(e2e_system)
+
+    def process_query(self, query: str, conversation: Optional[list] = None) -> Dict:
+        """자연어 질의 처리 (Function Calling)"""
+        if not self._initialized:
+            if not self.initialize():
+                return {"success": False, "error": "초기화 실패"}
+        if self.function_calling is None:
+            self.function_calling = FunctionCallingSupport(self.llm_manager, self.e2e_system)
+        return self.function_calling.process_query(query, conversation)
     
     def run(self, video_path: str) -> Dict:
         """

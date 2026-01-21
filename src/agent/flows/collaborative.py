@@ -19,6 +19,7 @@ from ..base import (
     ActorAgent,
     VideoAnalysisState,
 )
+from .function_calling_support import FunctionCallingSupport
 
 
 class CollaborativeFlow:
@@ -33,7 +34,7 @@ class CollaborativeFlow:
     - 집계 전략으로 최종 결정
     """
     
-    def __init__(self, gpu_id: int = 2, aggregation_strategy: str = "score"):
+    def __init__(self, gpu_id: int = 2, aggregation_strategy: str = "score", e2e_system=None):
         """
         Args:
             gpu_id: GPU ID
@@ -41,12 +42,14 @@ class CollaborativeFlow:
         """
         self.gpu_id = gpu_id
         self.aggregation_strategy = aggregation_strategy
+        self.e2e_system = e2e_system
         self.llm_manager = None
         self._initialized = False
         
         self.video_analysis_agent = None
         self.planners = []
         self.actor_agent = None
+        self.function_calling = None
     
     def initialize(self) -> bool:
         """Flow 초기화"""
@@ -76,10 +79,30 @@ class CollaborativeFlow:
         ]
         
         self.actor_agent = ActorAgent(self.llm_manager)
+
+        # Function Calling 초기화
+        self.function_calling = FunctionCallingSupport(self.llm_manager, self.e2e_system)
         
         self._initialized = True
         print("[CollaborativeFlow] 초기화 완료")
         return True
+
+    def set_e2e_system(self, e2e_system) -> None:
+        """E2ESystem 연결"""
+        self.e2e_system = e2e_system
+        if self.function_calling is None:
+            self.function_calling = FunctionCallingSupport(self.llm_manager, e2e_system)
+        else:
+            self.function_calling.set_e2e_system(e2e_system)
+
+    def process_query(self, query: str, conversation: Optional[list] = None) -> Dict:
+        """자연어 질의 처리 (Function Calling)"""
+        if not self._initialized:
+            if not self.initialize():
+                return {"success": False, "error": "초기화 실패"}
+        if self.function_calling is None:
+            self.function_calling = FunctionCallingSupport(self.llm_manager, self.e2e_system)
+        return self.function_calling.process_query(query, conversation)
     
     def run(self, video_path: str) -> Dict:
         """

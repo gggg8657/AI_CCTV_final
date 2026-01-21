@@ -67,6 +67,12 @@ from src.utils import (
     AgentEventHandler,
 )
 
+# Function Calling 시스템 import
+from src.agent.function_calling import (
+    FunctionRegistry,
+    register_core_functions,
+)
+
 
 # =============================================================================
 # 설정 및 상수
@@ -667,9 +673,10 @@ class VLMWrapper:
 class AgentWrapper:
     """Agent 시스템 래퍼 - sci_v2의 실제 Agent 사용"""
     
-    def __init__(self, flow_type: AgentFlowType, gpu_id: int = 0):
+    def __init__(self, flow_type: AgentFlowType, gpu_id: int = 0, e2e_system=None):
         self.flow_type = flow_type
         self.gpu_id = gpu_id
+        self.e2e_system = e2e_system
         self.flow = None
         self._loaded = False
     
@@ -687,7 +694,7 @@ class AgentWrapper:
             flow_name = self.flow_type.value  # "sequential", "hierarchical", "collaborative"
             
             # 실제 Agent Flow 생성
-            self.flow = create_flow(flow_name, gpu_id=self.gpu_id)
+            self.flow = create_flow(flow_name, gpu_id=self.gpu_id, e2e_system=self.e2e_system)
             
             if self.flow:
                 # 초기화 (llama.cpp 모델 로드 포함)
@@ -836,6 +843,9 @@ class E2ESystem:
         self.vlm_event_handler: Optional[VLMEventHandler] = None
         self.agent_event_handler: Optional[AgentEventHandler] = None
         
+        # Function Calling 시스템 (신규)
+        self.function_registry: Optional[FunctionRegistry] = None
+        
         # 콜백 (하위 호환성 유지)
         self.on_frame_callback: Optional[Callable] = None
         self.on_anomaly_callback: Optional[Callable] = None
@@ -925,7 +935,7 @@ class E2ESystem:
         # Agent 초기화 (선택적)
         if self.config.enable_agent:
             try:
-                self.agent = AgentWrapper(self.config.agent_flow, self.config.gpu_id)
+                self.agent = AgentWrapper(self.config.agent_flow, self.config.gpu_id, e2e_system=self)
                 if self.agent.load():
                     self.logger.log_info(f"Agent loaded: {self.config.agent_flow.value}")
                 else:
@@ -941,6 +951,14 @@ class E2ESystem:
                 self._register_event_handlers()
             except Exception as e:
                 self.logger.log_warning(f"EventBus start failed: {e} (continuing without async event processing)")
+        
+        # Function Calling 시스템 초기화
+        try:
+            self.function_registry = FunctionRegistry()
+            register_core_functions(self.function_registry, self)
+            self.logger.log_info("FunctionRegistry initialized with core functions")
+        except Exception as e:
+            self.logger.log_warning(f"FunctionRegistry initialization failed: {e}")
         
         self.logger.log_info("E2E System initialized successfully")
         return True, None
@@ -1343,6 +1361,10 @@ class E2ESystem:
     def get_event_bus(self) -> Optional[EventBus]:
         """이벤트 버스 반환"""
         return self.event_bus
+    
+    def get_function_registry(self) -> Optional[FunctionRegistry]:
+        """Function Registry 반환"""
+        return self.function_registry
 
 
 # =============================================================================
