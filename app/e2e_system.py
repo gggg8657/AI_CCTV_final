@@ -62,6 +62,9 @@ from src.utils import (
     AgentResponseEvent,
     FrameProcessedEvent,
     StatsUpdatedEvent,
+    VADEventHandler,
+    VLMEventHandler,
+    AgentEventHandler,
 )
 
 
@@ -827,6 +830,11 @@ class E2ESystem:
         
         # 이벤트 버스 (신규)
         self.event_bus: Optional[EventBus] = EventBus(max_history=1000)
+
+        # 이벤트 핸들러
+        self.vad_event_handler: Optional[VADEventHandler] = None
+        self.vlm_event_handler: Optional[VLMEventHandler] = None
+        self.agent_event_handler: Optional[AgentEventHandler] = None
         
         # 콜백 (하위 호환성 유지)
         self.on_frame_callback: Optional[Callable] = None
@@ -930,6 +938,9 @@ class E2ESystem:
             try:
                 self.event_bus.start()
                 self.logger.log_info("EventBus started")
+                self.vad_event_handler = VADEventHandler(event_bus=self.event_bus)
+                self.vlm_event_handler = VLMEventHandler(event_bus=self.event_bus)
+                self.agent_event_handler = AgentEventHandler(event_bus=self.event_bus)
             except Exception as e:
                 self.logger.log_warning(f"EventBus start failed: {e} (continuing without async event processing)")
         
@@ -958,6 +969,12 @@ class E2ESystem:
         # 이벤트 버스 중지
         if self.event_bus:
             try:
+                if self.vad_event_handler:
+                    self.vad_event_handler.unsubscribe()
+                if self.vlm_event_handler:
+                    self.vlm_event_handler.unsubscribe()
+                if self.agent_event_handler:
+                    self.agent_event_handler.unsubscribe()
                 self.event_bus.stop()
                 self.logger.log_info("EventBus stopped")
             except Exception as e:
