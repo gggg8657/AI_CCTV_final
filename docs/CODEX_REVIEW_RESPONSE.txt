@@ -1,0 +1,587 @@
+OpenAI Codex v0.87.0 (research preview)
+--------
+workdir: /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final
+model: gpt-5.2-codex
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: auto
+session id: 019be36f-2c61-7841-b6dd-8fd77f0d3b9e
+--------
+user
+[GOAL]
+Phase 3 개발 기획서를 코드 개발자 관점에서 검토하고 의견을 제시합니다.
+
+[CONTEXT]
+AI_CCTV_final 프로젝트의 Phase 3: Package Detection & Theft Detection 시스템 구현 계획입니다.
+
+현재 프로젝트 상태:
+- Phase 1: Event System (완료)
+- Phase 2: Function Calling System (완료)
+- Phase 3: Package Detection & Theft Detection (계획 단계)
+
+기술 스택:
+- Python 3.9+
+- PyTorch
+- YOLO v12 nano (ultralytics)
+- 기존 EventBus 시스템
+- 기존 Function Calling 시스템
+
+[INPUTS]
+다음 문서들을 검토해주세요:
+- docs/PHASE3_DEVELOPMENT_PLAN.md: 전체 개발 기획서 (6개 Sprint, 14일)
+- docs/PHASE3_DESIGN_DOCUMENT.md: 시스템 설계 문서 (SOLID 원칙 적용)
+- docs/PHASE3_IMPLEMENTATION_PLAN.md: 구현 계획서 (Sprint별 상세 계획)
+- docs/PHASE3_REQUIREMENTS.md: 요구사항 명세서
+
+주요 설계 포인트:
+1. PackageDetector: YOLO v12 nano 기반 패키지 감지
+2. PackageTracker: IOU 기반 패키지 추적
+3. TheftDetector: 3초 확인 로직을 통한 도난 감지
+4. 추상화 계층: BaseDetector, BaseTracker, BaseTheftDetector
+5. EventBus 통합: PackageDetectedEvent, PackageDisappearedEvent, TheftDetectedEvent
+6. Function Calling 통합: get_package_count(), get_package_details(), get_activity_log()
+
+[CONSTRAINTS]
+- 코드 개발자 관점에서 실용적인 피드백 제공
+- SOLID 원칙 준수 여부 검토
+- 구현 가능성 및 복잡도 평가
+- 성능 및 확장성 고려사항
+- 잠재적 문제점 및 개선 제안
+- 구체적이고 실행 가능한 의견 제시
+
+[OUTPUTS]
+다음 항목에 대한 의견을 제공해주세요:
+
+1. **아키텍처 설계 검토**
+   - 컴포넌트 분리 적절성 (PackageDetector, PackageTracker, TheftDetector)
+   - 의존성 관리
+   - 확장성 고려사항
+
+2. **SOLID 원칙 준수 검토**
+   - SRP: 각 클래스의 책임 분리
+   - OCP: 확장 가능성 (BaseDetector, BaseTracker, BaseTheftDetector)
+   - LSP: 상속 관계 적절성
+   - ISP: 인터페이스 분리
+   - DIP: 의존성 역전
+
+3. **구현 복잡도 평가**
+   - 일정 현실성 (2주, 14일, 6개 Sprint)
+   - 기술적 난이도
+   - 잠재적 리스크
+
+4. **성능 고려사항**
+   - YOLO 모델 통합 시 성능 영향
+   - 메모리 사용량 (목표: < 2GB 추가)
+   - 실시간 처리 가능성 (목표: 30 FPS)
+
+5. **개선 제안**
+   - 설계 개선점
+   - 구현 순서 최적화
+   - 테스트 전략 강화
+
+6. **잠재적 문제점**
+   - 기술적 이슈
+   - 통합 복잡도
+   - 유지보수성
+
+[VALIDATION]
+- 구체적이고 실행 가능한 피드백
+- 코드 예시 포함 (필요시)
+- 우선순위가 있는 개선 제안
+- 실용적인 개발자 관점의 의견
+
+[REQUEST]
+위 문서들을 검토하고, 코드 개발자로서 Phase 3 계획에 대한 상세한 의견을 제시해주세요.
+특히 다음 사항에 중점을 두어주세요:
+- 설계의 실용성과 구현 가능성
+- SOLID 원칙 준수 여부
+- 일정의 현실성
+- 성능 및 확장성
+- 구체적인 개선 제안
+mcp startup: no servers
+mcp startup: no servers
+
+thinking
+**Preparing to review plan and docs**
+thinking
+**Preparing to review plan and docs**
+exec
+/bin/zsh -lc ls in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 52ms:
+alembic
+app
+clips
+configs
+docs
+FIX_NUMPY.md
+logs
+PROJECT_STRUCTURE.md
+README.md
+requirements.txt
+run_ui.sh
+scripts
+src
+tests
+TODAY_SUMMARY.md
+ui
+UI_TEST_GUIDE.md
+exec
+/bin/zsh -lc "sed -n '1,200p' docs/PHASE3_DEVELOPMENT_PLAN.md" in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 44ms:
+# Phase 3: Package Detection & Theft Detection 개발 기획서
+
+**버전**: 1.0  
+**작성일**: 2026-01-22  
+**작성자**: AI Assistant  
+**Linear Issue**: CHA-55 (생성 예정)
+
+---
+
+## 목차
+
+1. [요구사항 분석](#1-요구사항-분석)
+2. [시스템 설계](#2-시스템-설계)
+3. [구현 계획](#3-구현-계획)
+4. [테스트 계획](#4-테스트-계획)
+5. [리스크 분석 및 대응](#5-리스크-분석-및-대응)
+6. [일정 계획](#6-일정-계획)
+
+---
+
+exec
+/bin/zsh -lc "sed -n '200,400p' docs/PHASE3_DEVELOPMENT_PLAN.md" in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 39ms:
+- [ ] PackageTracker 클래스 구현
+- [ ] 추적 알고리즘 구현 (IOU 기반 또는 DeepSORT)
+- [ ] 패키지 ID 관리 시스템
+- [ ] 추적 기능 테스트
+
+#### Sprint 3: 도난 감지 로직 (2일)
+- [ ] TheftDetector 클래스 구현
+- [ ] 3초 확인 로직 구현
+- [ ] 거짓 경보 필터링
+- [ ] 도난 감지 테스트
+
+#### Sprint 4: 이벤트 통합 (2일)
+- [ ] 이벤트 타입 정의 및 구현
+- [ ] EventBus에 이벤트 핸들러 등록
+- [ ] 이벤트 발행 로직 통합
+- [ ] 이벤트 플로우 테스트
+
+#### Sprint 5: Function Calling 통합 (2일)
+- [ ] Function Calling 함수 구현
+  - `get_package_count()`
+exec
+/bin/zsh -lc "sed -n '1,200p' docs/PHASE3_DESIGN_DOCUMENT.md" in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 42ms:
+# Phase 3: 시스템 설계 문서 (System Design Document)
+
+**버전**: 1.0  
+**작성일**: 2026-01-22  
+**Linear Issue**: CHA-55
+
+---
+
+## 목차
+
+1. [시스템 아키텍처](#1-시스템-아키텍처)
+2. [컴포넌트 설계](#2-컴포넌트-설계)
+3. [데이터 흐름](#3-데이터-흐름)
+4. [클래스 다이어그램](#4-클래스-다이어그램)
+5. [시퀀스 다이어그램](#5-시퀀스-다이어그램)
+6. [상태 다이어그램](#6-상태-다이어그램)
+
+---
+
+## 1. 시스템 아키텍처
+exec
+/bin/zsh -lc "sed -n '200,400p' docs/PHASE3_DESIGN_DOCUMENT.md" in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 55ms:
+    
+    def check_theft(
+        self,
+        tracked_packages: List[TrackedPackage],
+        current_time: str
+    ) -> Optional[TheftDetectedEvent]:
+        """도난 감지 확인"""
+        # 1. "present" -> "missing" 전환 감지
+        # 2. 3초 확인 로직
+        # 3. 도난 이벤트 생성
+        pass
+    
+    def _update_missing_state(
+        self,
+        tracked_packages: List[TrackedPackage],
+        current_time: str
+    ):
+        """missing 상태 업데이트"""
+        pass
+    
+exec
+/bin/zsh -lc "sed -n '400,800p' docs/PHASE3_DESIGN_DOCUMENT.md" in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 51ms:
+        current_time: str
+    ) -> Optional[TheftDetectedEvent]:
+        pass
+```
+
+**설계 원칙 적용**:
+- **DIP**: 구체적인 구현이 아닌 추상화에 의존
+- **OCP**: 새로운 감지/추적 알고리즘 추가 시 기존 코드 수정 불필요
+- **LSP**: 모든 구현체가 추상 클래스를 대체 가능
+
+---
+
+## 8. 통합 포인트
+
+### 8.1 E2ESystem 통합
+
+```python
+class E2ESystem:
+    def __init__(self, config):
+        # ... 기존 코드 ...
+exec
+/bin/zsh -lc "sed -n '1,200p' docs/PHASE3_IMPLEMENTATION_PLAN.md" in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 39ms:
+# Phase 3: 구현 계획서 (Implementation Plan)
+
+**버전**: 1.0  
+**작성일**: 2026-01-22  
+**Linear Issue**: CHA-55
+
+---
+
+## 목차
+
+1. [구현 단계](#1-구현-단계)
+2. [파일 구조](#2-파일-구조)
+3. [코딩 표준](#3-코딩-표준)
+4. [의존성 관리](#4-의존성-관리)
+5. [코드 리뷰 체크리스트](#5-코드-리뷰-체크리스트)
+
+---
+
+## 1. 구현 단계
+
+exec
+/bin/zsh -lc "sed -n '200,400p' docs/PHASE3_IMPLEMENTATION_PLAN.md" in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 50ms:
+### 3.1 Python 스타일 가이드
+- PEP 8 준수
+- 타입 힌트 필수
+- Docstring 필수 (Google 스타일)
+
+### 3.2 OOP 원칙 준수
+- **SRP**: 각 클래스는 단일 책임
+- **OCP**: 확장에는 열려있고 수정에는 닫혀있음
+- **LSP**: 자식 클래스는 부모 클래스를 대체 가능
+- **ISP**: 인터페이스 분리
+- **DIP**: 추상화에 의존
+
+### 3.3 네이밍 규칙
+- 클래스: PascalCase (`PackageDetector`)
+- 함수/변수: snake_case (`detect_packages`)
+- 상수: UPPER_SNAKE_CASE (`IOU_THRESHOLD`)
+
+### 3.4 에러 처리
+- 모든 예외 상황 처리
+- 명확한 에러 메시지
+
+thinking
+**Requesting requirements document**
+thinking
+**Requesting requirements document**
+exec
+/bin/zsh -lc "sed -n '1,200p' docs/PHASE3_REQUIREMENTS.md" in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 42ms:
+# Phase 3: 요구사항 명세서 (Requirements Specification)
+
+**버전**: 1.0  
+**작성일**: 2026-01-22  
+**Linear Issue**: CHA-55
+
+---
+
+## 1. 기능 요구사항 (Functional Requirements)
+
+### FR-1: 패키지 객체 감지
+
+**ID**: FR-1  
+**우선순위**: High  
+**설명**: YOLO v12 nano 모델을 사용하여 비디오 프레임에서 패키지 객체를 감지합니다.
+
+**입력**:
+- 비디오 프레임 (numpy.ndarray, shape: (H, W, 3), dtype: uint8)
+- 모델 경로 (str, optional)
+
+exec
+/bin/zsh -lc "sed -n '200,400p' docs/PHASE3_REQUIREMENTS.md" in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 42ms:
+
+- **패키지 감지 속도**: 최소 30 FPS (YOLO v12 nano)
+- **전체 파이프라인 레이턴시**: VAD + Package Detection 통합 시 < 200ms
+- **메모리 사용량**: 기존 시스템 대비 < 2GB 추가
+
+### NFR-2: 정확도
+
+- **패키지 감지 정확도**: COCO 데이터셋 기준 mAP@0.5 > 0.5
+- **추적 정확도**: 패키지 ID 유지율 > 80%
+- **도난 감지 거짓 경보율**: < 5%
+
+### NFR-3: 확장성
+
+- **동시 추적 패키지 수**: 최소 10개
+- **멀티 카메라 지원**: 향후 확장 가능한 구조
+
+### NFR-4: 유지보수성
+
+- **코드 커버리지**: > 80%
+- **문서화**: 모든 public 메서드에 docstring
+exec
+/bin/zsh -lc "sed -n '400,800p' docs/PHASE3_REQUIREMENTS.md" in /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final succeeded in 48ms:
+
+### 7.1 단위 테스트
+- 각 클래스의 모든 public 메서드 테스트
+- 에러 케이스 테스트
+- 엣지 케이스 테스트
+
+### 7.2 통합 테스트
+- E2ESystem 통합 테스트
+- EventBus 통합 테스트
+- Function Calling 통합 테스트
+
+### 7.3 성능 테스트
+- FPS 측정
+- 메모리 사용량 측정
+- 레이턴시 측정
+
+---
+
+## 8. 승인 기준
+
+
+thinking
+**Providing structured plan feedback in Korean**
+
+계획 검토 관점에서 우선 순위별 개선 사항과 리스크를 정리합니다.
+
+**1. 성능 및 리스크**
+- YOLO v12 nano + VAD+VLM 조합의 30FPS 실시간 처리: 공유 GPU 환경에서 현실적이지 않을 수 있음 (P0)  
+  → 프레임 스킵, 비동기 처리, 배칭, GPU 메모리 최적화 필요  
+- IOU 기반 트래킹 한계(미싱/가려짐 이슈 등) (P1)  
+- 3초 로직에선 monotonic timestamp 사용 권장, 시스템 시간 의존은 오류 초래가능 (P1)  
+- 이벤트 폭주 처리 및 중복 제거 전략 필요 (P0)  
+- 데이터 모델 타임스탬프 지금 문자열 → 성능 위해 float 타입(Unix time 등) 권장 (P1)  
+
+**2. 요구사항 및 데이터셋 리스크**
+- COCO 데이터셋은 “package” 클래스 미지원, 커스텀 클래스 매핑 필요 (P0)  
+- mAP 측정 기준 재검토 필수  
+- YOLO v12 nano 공개 여부 미확실 (Ultralytics 미포함 가능성) (P2)  
+
+**3. 설계 및 아키텍처**
+- 함수 호출 방식이 e2e_system과 강결합 → 서비스 레이어 도입으로 유연성 제고 권장 (P0)  
+- 기본 인터페이스 정의 및 컴포지션 활용 권장 (P1)  
+- 상태 머신 도입으로 이벤트 흐름 관리, 추적 ID로 중복 방지 (P1)  
+- 이벤트 중복 제거 및 페이로드(프레임 base64) 크기 줄이기 (P0)  
+- 프레임 페이로드를 직접 저장하는 대신 참조값 사용 권장, 메모리 2GB 제한 준수 필요 (P0)  
+
+**4. 테스트 및 스프린트 일정**
+- 14일 내 6개 스프린트는 다소 빠듯하므로 버퍼 포함 스케줄 제안 (P1)  
+- 통합 테스트 포함 전반적 테스트 계획 강화 필요 (P0)  
+
+**5. 데이터 출력 및 저장**
+- 이벤트 로그 JSON 출력은 비효율적일 수 있음, 더 경량화된 포맷 제안 (P1)  
+- 영속성 고려: 이벤트와 프레임 저장소 설계 검토 권장 (P1)  
+
+**6. 코드 예시 (개선 방향 간략)**
+```python
+# 기본 인터페이스 예시
+class TrackerInterface:
+    def track(self, frames): 
+        raise NotImplementedError
+
+class YOLOTracker(TrackerInterface):
+    def track(self, frames):
+        # 추적 로직
+        pass
+
+# 상태머신 예시 간략
+class StateMachine:
+    def __init__(self):
+        self.state = 'init'
+
+    def event(self, evt):
+        if self.state == 'init' and evt == 'start':
+            self.state = 'running'
+        # 추가 상태 전이
+```
+
+우선순위별로 P0는 필수 해결해야 하는 주요 리스크와 구조적 문제, P1은 성능 최적화와 테스트, P2는 장기 검토사항으로 분류했습니다.
+thinking
+**Providing structured plan feedback in Korean**
+
+계획 검토 관점에서 우선 순위별 개선 사항과 리스크를 정리합니다.
+
+**1. 성능 및 리스크**
+- YOLO v12 nano + VAD+VLM 조합의 30FPS 실시간 처리: 공유 GPU 환경에서 현실적이지 않을 수 있음 (P0)  
+  → 프레임 스킵, 비동기 처리, 배칭, GPU 메모리 최적화 필요  
+- IOU 기반 트래킹 한계(미싱/가려짐 이슈 등) (P1)  
+- 3초 로직에선 monotonic timestamp 사용 권장, 시스템 시간 의존은 오류 초래가능 (P1)  
+- 이벤트 폭주 처리 및 중복 제거 전략 필요 (P0)  
+- 데이터 모델 타임스탬프 지금 문자열 → 성능 위해 float 타입(Unix time 등) 권장 (P1)  
+
+**2. 요구사항 및 데이터셋 리스크**
+- COCO 데이터셋은 “package” 클래스 미지원, 커스텀 클래스 매핑 필요 (P0)  
+- mAP 측정 기준 재검토 필수  
+- YOLO v12 nano 공개 여부 미확실 (Ultralytics 미포함 가능성) (P2)  
+
+**3. 설계 및 아키텍처**
+- 함수 호출 방식이 e2e_system과 강결합 → 서비스 레이어 도입으로 유연성 제고 권장 (P0)  
+- 기본 인터페이스 정의 및 컴포지션 활용 권장 (P1)  
+- 상태 머신 도입으로 이벤트 흐름 관리, 추적 ID로 중복 방지 (P1)  
+- 이벤트 중복 제거 및 페이로드(프레임 base64) 크기 줄이기 (P0)  
+- 프레임 페이로드를 직접 저장하는 대신 참조값 사용 권장, 메모리 2GB 제한 준수 필요 (P0)  
+
+**4. 테스트 및 스프린트 일정**
+- 14일 내 6개 스프린트는 다소 빠듯하므로 버퍼 포함 스케줄 제안 (P1)  
+- 통합 테스트 포함 전반적 테스트 계획 강화 필요 (P0)  
+
+**5. 데이터 출력 및 저장**
+- 이벤트 로그 JSON 출력은 비효율적일 수 있음, 더 경량화된 포맷 제안 (P1)  
+- 영속성 고려: 이벤트와 프레임 저장소 설계 검토 권장 (P1)  
+
+**6. 코드 예시 (개선 방향 간략)**
+```python
+# 기본 인터페이스 예시
+class TrackerInterface:
+    def track(self, frames): 
+        raise NotImplementedError
+
+class YOLOTracker(TrackerInterface):
+    def track(self, frames):
+        # 추적 로직
+        pass
+
+# 상태머신 예시 간략
+class StateMachine:
+    def __init__(self):
+        self.state = 'init'
+
+    def event(self, evt):
+        if self.state == 'init' and evt == 'start':
+            self.state = 'running'
+        # 추가 상태 전이
+```
+
+우선순위별로 P0는 필수 해결해야 하는 주요 리스크와 구조적 문제, P1은 성능 최적화와 테스트, P2는 장기 검토사항으로 분류했습니다.
+codex
+아래는 Phase 3 계획 문서를 **코드 개발자 관점**에서 검토한 의견입니다. 요청하신 항목별로 구성했고, 가능한 한 실행 가능한 개선 제안을 포함했습니다.
+
+---
+
+## 1. 아키텍처 설계 검토
+
+**컴포넌트 분리**
+- `PackageDetector / PackageTracker / TheftDetector`로 책임이 명확히 분리된 점은 적절합니다. 특히 **감지-추적-판단** 흐름이 명시돼 있어 테스트와 확장이 용이합니다.
+- 다만 `TheftDetector`가 이벤트 생성까지 직접 수행하면 책임이 살짝 커질 수 있습니다. 이벤트 생성은 별도 `TheftEventFactory` 혹은 `PackageEventPublisher`로 분리하면 SRP와 테스트 용이성이 개선됩니다.
+
+**의존성 관리**
+- `E2ESystem`에서 구체 구현체를 직접 초기화하는 구조는 DIP 위반 가능성이 있습니다. 추상화(BaseDetector/BaseTracker/BaseTheftDetector)를 주입받도록 인터페이스를 고정하면 DI 테스트가 쉬워집니다.
+
+**확장성**
+- 향후 **멀티 카메라**, **다른 객체 감지**, **더 고급 추적(DeepSORT)** 확장을 고려하면, `TrackedPackage`가 `camera_id`를 포함하도록 데이터 모델을 초기에 확정하는 게 좋습니다.
+
+---
+
+## 2. SOLID 원칙 준수 검토
+
+**SRP**
+- 각 컴포넌트 책임 분리는 명확합니다.  
+- 단, `PackageTracker` 내부에 “ID 관리 + 상태전환 + 만료”까지 모두 포함되면 책임이 많아질 수 있으니 **상태 머신** 혹은 `PackageStateManager` 분리 고려.
+
+**OCP**
+- `BaseDetector`, `BaseTracker`, `BaseTheftDetector` 도입은 매우 적절합니다.  
+- 다만 `E2ESystem` 내부에서 구체 클래스를 직접 생성하면 OCP 이점을 살리기 어렵습니다. Config 기반 **Factory 패턴** 추가를 추천합니다.
+
+**LSP**
+- Base 클래스는 명확한 반환 타입이 정의되어 있어 LSP에 부합합니다.  
+- 단, `detect()`가 빈 리스트를 반환해야 한다는 규약은 문서로 강화해야 구현체 불일치 문제가 줄어듭니다.
+
+**ISP**
+- 인터페이스 규모가 적절하며, 불필요한 메서드는 없습니다.
+
+**DIP**
+- 설계 문서에서는 DIP를 강조했지만 실제 통합 흐름(E2ESystem)에서는 구현체 의존이 될 가능성이 높습니다. 이 부분은 **의존성 주입 + 인터페이스 기반 factory**로 보완 필요.
+
+---
+
+## 3. 구현 복잡도 평가
+
+**일정 현실성 (2주 / 6 Sprint)**
+- 기능 수 대비 Sprint 기간이 매우 빡빡합니다. 특히 YOLO 통합 + Tracker + 도난 로직 + EventBus + FunctionCalling + 통합 테스트까지 포함하면 **실제 디버깅 시간/성능 튜닝**이 부족합니다.
+- **추천**: Sprint 6에 성능 최적화 외에 **버퍼 1~2일** 확보하거나 Sprint 1/2에서 예상치 못한 이슈 대응 시간을 반영해야 합니다.
+
+**기술 난이도**
+- YOLO v12 nano + IOU tracking + 3초 로직은 구현 난이도 중간이지만, **실시간 성능 유지**와 **오탐률 <5%**는 난이도가 높습니다.
+
+**리스크 포인트**
+- COCO에는 “package” 클래스가 명확하지 않아, “bag/box” 등 매핑이 애매합니다. **커스텀 클래스 학습 필요 가능성**이 큽니다.
+
+---
+
+## 4. 성능 고려사항
+
+**YOLO 모델 통합**
+- `ultralytics` 기반 YOLO v12 nano가 실제 제공되는지 확인 필요 (현재 공식 문서 기준 v8이 안정적).  
+- 실제 성능은 **GPU 공유 환경**에서 30 FPS 달성이 불확실합니다.
+
+**메모리 (<2GB)**
+- 이벤트에 `evidence_frames`를 base64로 직접 포함하면 메모리 부담이 큽니다. 대용량 프레임을 이벤트에 직접 담는 구조는 피하는 것이 좋습니다.
+
+**실시간 처리 (30 FPS)**
+- VAD + Package Detection + VLM이 모두 동시에 돌면 30 FPS는 현실적으로 어려울 수 있습니다.  
+- **프레임 스킵**, **비동기 처리**, **저해상도 inference 옵션** 등 구체적 최적화 전략이 필요합니다.
+
+---
+
+## 5. 개선 제안 (우선순위 포함)
+
+### [P1] 아키텍처 개선
+- **이벤트 생성 책임 분리**: TheftDetector가 이벤트 생성/발행을 직접 하지 않도록 분리.
+- **DI/Factory 도입**: E2ESystem에서 구현체 직접 생성 → Config 기반 Factory로 교체.
+
+### [P1] 성능/메모리 개선
+- `evidence_frames`를 이벤트에 직접 저장하지 말고 **파일 경로/ID 참조**로 저장.
+- FPS 목표 보장 위해 **frame_skip / async queue** 옵션을 미리 설계 문서에 포함.
+
+### [P2] 모델 정확도 리스크 완화
+- COCO 기반 “package” 감지가 애매하므로, 클래스 매핑 또는 커스텀 데이터셋 준비 여부 명시.
+
+### [P2] 시간 처리 개선
+- `timestamp`를 ISO string으로만 관리하면 시간 계산(3초 확인)이 비효율적이므로 내부 로직은 `time.time()` 기반 float 사용 권장.
+
+---
+
+## 6. 잠재적 문제점
+
+1. **데이터셋/클래스 불일치**
+   - COCO에는 “package”가 명확히 존재하지 않음 → 감지 정확도 요구사항 충족이 어려울 가능성.
+
+2. **EventBus 메모리 폭증 위험**
+   - `evidence_frames`를 이벤트 객체에 직접 담으면 메모리 증가 + GC 부담 → 성능 저하.
+
+3. **통합 복잡도 과소평가**
+   - E2ESystem에 기존 VAD/Agent 시스템과 통합하면서 성능/동기화 이슈 발생 가능.
+
+4. **3초 확인 로직의 시간 기준 불명확**
+   - 프레임 간 간격이 일정하지 않으면 “3초” 계산 오차 발생. 실시간 timestamp 기반 계산 필요.
+
+---
+
+## 추가 제안: 테스트 전략 강화
+
+- **TheftDetector 상태 전이 테스트**: present→missing→stolen 경계 조건
+- **Tracker ID 유지 테스트**: IOU 기준 미세 변화 시 동일 ID 유지 여부
+- **성능 회귀 테스트**: 최소 FPS 기준 자동 체크 스크립트 추가
+
+---
+
+## 요약 결론
+
+- 설계는 전반적으로 **구조적이고 SOLID 관점에서 잘 정리**되어 있습니다.
+- 다만 **성능 목표(30 FPS)와 정확도 목표**를 동시에 달성하려면 모델/데이터셋 리스크와 메모리 부담을 더 명확히 고려해야 합니다.
+- 일정은 현실적으로 타이트하므로 버퍼 확보가 필요하며, 통합/성능 튜닝 시간은 더 확보되어야 합니다.
+
+원하시면 **개선된 설계안(Factory/DI, 이벤트 구조, 시간 처리 방식)**을 구체적으로 작성해 드릴 수 있습니다.
