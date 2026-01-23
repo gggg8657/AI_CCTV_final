@@ -34,7 +34,13 @@ class CollaborativeFlow:
     - 집계 전략으로 최종 결정
     """
     
-    def __init__(self, gpu_id: int = 2, aggregation_strategy: str = "score", e2e_system=None):
+    def __init__(
+        self,
+        gpu_id: int = 2,
+        aggregation_strategy: str = "score",
+        e2e_system=None,
+        config: Optional[Dict] = None,
+    ):
         """
         Args:
             gpu_id: GPU ID
@@ -43,6 +49,7 @@ class CollaborativeFlow:
         self.gpu_id = gpu_id
         self.aggregation_strategy = aggregation_strategy
         self.e2e_system = e2e_system
+        self.config = config
         self.llm_manager = None
         self._initialized = False
         
@@ -58,7 +65,7 @@ class CollaborativeFlow:
         
         print("[CollaborativeFlow] 초기화 중...")
         
-        self.llm_manager = LLMManager()
+        self.llm_manager = LLMManager(self.config)
         
         # 모델 로드
         if not self.llm_manager.load_vision_llm(self.gpu_id):

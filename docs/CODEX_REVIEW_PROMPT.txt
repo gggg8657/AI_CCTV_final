@@ -1,0 +1,90 @@
+[GOAL]
+Phase 3 개발 기획서를 코드 개발자 관점에서 검토하고 의견을 제시합니다.
+
+[CONTEXT]
+AI_CCTV_final 프로젝트의 Phase 3: Package Detection & Theft Detection 시스템 구현 계획입니다.
+
+현재 프로젝트 상태:
+- Phase 1: Event System (완료)
+- Phase 2: Function Calling System (완료)
+- Phase 3: Package Detection & Theft Detection (계획 단계)
+
+기술 스택:
+- Python 3.9+
+- PyTorch
+- YOLO v12 nano (ultralytics)
+- 기존 EventBus 시스템
+- 기존 Function Calling 시스템
+
+[INPUTS]
+다음 문서들을 검토해주세요:
+- docs/PHASE3_DEVELOPMENT_PLAN.md: 전체 개발 기획서 (6개 Sprint, 14일)
+- docs/PHASE3_DESIGN_DOCUMENT.md: 시스템 설계 문서 (SOLID 원칙 적용)
+- docs/PHASE3_IMPLEMENTATION_PLAN.md: 구현 계획서 (Sprint별 상세 계획)
+- docs/PHASE3_REQUIREMENTS.md: 요구사항 명세서
+
+주요 설계 포인트:
+1. PackageDetector: YOLO v12 nano 기반 패키지 감지
+2. PackageTracker: IOU 기반 패키지 추적
+3. TheftDetector: 3초 확인 로직을 통한 도난 감지
+4. 추상화 계층: BaseDetector, BaseTracker, BaseTheftDetector
+5. EventBus 통합: PackageDetectedEvent, PackageDisappearedEvent, TheftDetectedEvent
+6. Function Calling 통합: get_package_count(), get_package_details(), get_activity_log()
+
+[CONSTRAINTS]
+- 코드 개발자 관점에서 실용적인 피드백 제공
+- SOLID 원칙 준수 여부 검토
+- 구현 가능성 및 복잡도 평가
+- 성능 및 확장성 고려사항
+- 잠재적 문제점 및 개선 제안
+- 구체적이고 실행 가능한 의견 제시
+
+[OUTPUTS]
+다음 항목에 대한 의견을 제공해주세요:
+
+1. **아키텍처 설계 검토**
+   - 컴포넌트 분리 적절성 (PackageDetector, PackageTracker, TheftDetector)
+   - 의존성 관리
+   - 확장성 고려사항
+
+2. **SOLID 원칙 준수 검토**
+   - SRP: 각 클래스의 책임 분리
+   - OCP: 확장 가능성 (BaseDetector, BaseTracker, BaseTheftDetector)
+   - LSP: 상속 관계 적절성
+   - ISP: 인터페이스 분리
+   - DIP: 의존성 역전
+
+3. **구현 복잡도 평가**
+   - 일정 현실성 (2주, 14일, 6개 Sprint)
+   - 기술적 난이도
+   - 잠재적 리스크
+
+4. **성능 고려사항**
+   - YOLO 모델 통합 시 성능 영향
+   - 메모리 사용량 (목표: < 2GB 추가)
+   - 실시간 처리 가능성 (목표: 30 FPS)
+
+5. **개선 제안**
+   - 설계 개선점
+   - 구현 순서 최적화
+   - 테스트 전략 강화
+
+6. **잠재적 문제점**
+   - 기술적 이슈
+   - 통합 복잡도
+   - 유지보수성
+
+[VALIDATION]
+- 구체적이고 실행 가능한 피드백
+- 코드 예시 포함 (필요시)
+- 우선순위가 있는 개선 제안
+- 실용적인 개발자 관점의 의견
+
+[REQUEST]
+위 문서들을 검토하고, 코드 개발자로서 Phase 3 계획에 대한 상세한 의견을 제시해주세요.
+특히 다음 사항에 중점을 두어주세요:
+- 설계의 실용성과 구현 가능성
+- SOLID 원칙 준수 여부
+- 일정의 현실성
+- 성능 및 확장성
+- 구체적인 개선 제안

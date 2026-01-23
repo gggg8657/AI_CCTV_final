@@ -6,6 +6,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from ..function_calling import FunctionRegistry, register_core_functions
+from ..llm_wrapper import create_chat_completion_with_tools
 
 
 class FunctionCallingSupport:
@@ -19,6 +20,16 @@ class FunctionCallingSupport:
         if e2e_system is not None:
             register_core_functions(self.registry, e2e_system)
             self._ready = True
+    
+    def _is_api_mode(self) -> bool:
+        """API 모드 여부 확인"""
+        return hasattr(self.llm_manager, 'mode') and self.llm_manager.mode == "api"
+    
+    def _get_model_name(self) -> str:
+        """모델 이름 가져오기 (API 모드)"""
+        if self._is_api_mode():
+            return getattr(self.llm_manager, 'text_model_name', 'Qwen/Qwen3-8B')
+        return None
 
     def set_e2e_system(self, e2e_system) -> None:
         self.e2e_system = e2e_system
@@ -64,19 +75,41 @@ class FunctionCallingSupport:
         messages.append({"role": "user", "content": query})
 
         try:
-            response = self.llm_manager.text_llm.create_chat_completion(
+            # Function Calling 지원 래퍼 사용
+            is_api = self._is_api_mode()
+            model_name = self._get_model_name() if is_api else None
+            response = create_chat_completion_with_tools(
+                self.llm_manager.text_llm,
                 messages=messages,
                 tools=self.registry.list_functions(),
                 tool_choice="auto",
+                model_name=model_name,
+                is_api_mode=is_api,
                 temperature=0.2,
                 max_tokens=512,
             )
         except Exception as exc:
-            fallback = self.llm_manager.text_llm.create_chat_completion(
-                messages=messages,
-                temperature=0.2,
-                max_tokens=256,
-            )
+            # Fallback: tools 없이 일반 호출
+            if self._is_api_mode():
+                fallback = self.llm_manager.text_llm.chat.completions.create(
+                    model=self._get_model_name(),
+                    messages=messages,
+                    temperature=0.2,
+                    max_tokens=256,
+                )
+                fallback = {
+                    "choices": [{
+                        "message": {
+                            "content": fallback.choices[0].message.content
+                        }
+                    }]
+                }
+            else:
+                fallback = self.llm_manager.text_llm.create_chat_completion(
+                    messages=messages,
+                    temperature=0.2,
+                    max_tokens=256,
+                )
             content = fallback["choices"][0]["message"].get("content", "").strip()
             return {
                 "success": True,
@@ -86,6 +119,17 @@ class FunctionCallingSupport:
                 "warning": f"Tool calling unavailable: {exc}",
             }
 
+        # 응답 검증
+        if not response.get("choices") or not response["choices"][0].get("message"):
+            logging.error("Invalid response format from LLM")
+            return {
+                "success": False,
+                "error": "Invalid response format",
+                "response": "",
+                "tool_calls": [],
+                "tool_results": [],
+            }
+        
         message = response["choices"][0]["message"]
         tool_calls = message.get("tool_calls")
         if not tool_calls and message.get("function_call"):
@@ -105,12 +149,18 @@ class FunctionCallingSupport:
             for index, tool_call in enumerate(tool_calls):
                 function_call = tool_call.get("function", {})
                 name = function_call.get("name")
+                
+                if not name:
+                    logging.warning(f"Tool call {index} missing function name, skipping")
+                    continue
+                
                 raw_args = function_call.get("arguments")
                 parsed_args = self._parse_arguments(raw_args)
 
                 try:
                     result = self.registry.call(name, parsed_args)
                 except Exception as exc:
+                    logging.error(f"Function call failed for {name}: {exc}")
                     result = {"ok": False, "error": str(exc)}
 
                 tool_results.append(
@@ -131,11 +181,27 @@ class FunctionCallingSupport:
                 )
 
             try:
-                follow_up = self.llm_manager.text_llm.create_chat_completion(
-                    messages=messages,
-                    temperature=0.2,
-                    max_tokens=512,
-                )
+                # Function Calling 결과를 바탕으로 최종 응답 생성
+                if self._is_api_mode():
+                    follow_up = self.llm_manager.text_llm.chat.completions.create(
+                        model=self._get_model_name(),
+                        messages=messages,
+                        temperature=0.2,
+                        max_tokens=512,
+                    )
+                    follow_up = {
+                        "choices": [{
+                            "message": {
+                                "content": follow_up.choices[0].message.content
+                            }
+                        }]
+                    }
+                else:
+                    follow_up = self.llm_manager.text_llm.create_chat_completion(
+                        messages=messages,
+                        temperature=0.2,
+                        max_tokens=512,
+                    )
                 response_text = (
                     follow_up["choices"][0]["message"].get("content", "").strip()
                 )
@@ -167,6 +233,9 @@ class FunctionCallingSupport:
                 return {}
             try:
                 return json.loads(raw_args)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                # JSON 파싱 에러 로깅 (길이 제한)
+                arg_preview = raw_args[:200] if len(raw_args) > 200 else raw_args
+                logging.warning(f"Failed to parse tool arguments as JSON: {e}. Args preview: {arg_preview}")
                 return {}
         return {}

@@ -121,6 +121,14 @@ class SystemConfig:
     # Agent 설정
     enable_agent: bool = True
     agent_flow: AgentFlowType = AgentFlowType.SEQUENTIAL
+    # LLM 모델 경로 (config.yaml에서 읽음)
+    agent_text_model_path: str = ""
+    agent_vision_model_path: str = ""
+    agent_vision_mmproj_path: str = ""
+    agent_n_gpu_layers: int = -1
+    agent_n_ctx: int = 32768
+    agent_n_threads: int = 16
+    agent_n_batch: int = 512
     
     # 클립 저장 설정
     save_clips: bool = True
@@ -693,8 +701,26 @@ class AgentWrapper:
             # Flow 이름 변환
             flow_name = self.flow_type.value  # "sequential", "hierarchical", "collaborative"
             
+            # Config 준비 (E2ESystem에서 모델 경로 가져오기)
+            config_dict = {}
+            if self.e2e_system and hasattr(self.e2e_system, 'config'):
+                config_dict = {
+                    "llm": {
+                        "text_model_path": getattr(self.e2e_system.config, 'agent_text_model_path', ''),
+                        "vision_model_path": getattr(self.e2e_system.config, 'agent_vision_model_path', ''),
+                        "vision_mmproj_path": getattr(self.e2e_system.config, 'agent_vision_mmproj_path', ''),
+                        "n_gpu_layers": getattr(self.e2e_system.config, 'agent_n_gpu_layers', -1),
+                        "n_ctx": getattr(self.e2e_system.config, 'agent_n_ctx', 32768),
+                        "n_threads": getattr(self.e2e_system.config, 'agent_n_threads', 16),
+                        "n_batch": getattr(self.e2e_system.config, 'agent_n_batch', 512),
+                    },
+                    "gpu": {
+                        "device_id": self.gpu_id,
+                    }
+                }
+            
             # 실제 Agent Flow 생성
-            self.flow = create_flow(flow_name, gpu_id=self.gpu_id, e2e_system=self.e2e_system)
+            self.flow = create_flow(flow_name, gpu_id=self.gpu_id, e2e_system=self.e2e_system, config=config_dict)
             
             if self.flow:
                 # 초기화 (llama.cpp 모델 로드 포함)

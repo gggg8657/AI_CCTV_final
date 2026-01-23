@@ -16,9 +16,9 @@ from .event_bus import BaseEvent
 @dataclass
 class AnomalyDetectedEvent(BaseEvent):
     """이상 감지 이벤트"""
-    frame_id: int
-    score: float
-    threshold: float
+    frame_id: int = 0
+    score: float = 0.0
+    threshold: float = 0.0
     frame: Optional[np.ndarray] = None  # 프레임 이미지 (선택)
     
     def __post_init__(self):
@@ -35,9 +35,9 @@ class AnomalyDetectedEvent(BaseEvent):
 @dataclass
 class VLMAnalysisCompletedEvent(BaseEvent):
     """VLM 분석 완료 이벤트"""
-    original_event_id: str  # 원본 AnomalyDetectedEvent ID
-    detected_type: str
-    description: str
+    original_event_id: str = ""  # 원본 AnomalyDetectedEvent ID
+    detected_type: str = ""
+    description: str = ""
     actions: List[str] = field(default_factory=list)
     confidence: float = 0.0
     clip_path: str = ""
@@ -56,7 +56,7 @@ class VLMAnalysisCompletedEvent(BaseEvent):
 @dataclass
 class AgentResponseEvent(BaseEvent):
     """Agent 대응 계획 이벤트"""
-    original_event_id: str  # 원본 AnomalyDetectedEvent ID
+    original_event_id: str = ""  # 원본 AnomalyDetectedEvent ID
     plan: List[str] = field(default_factory=list)
     priority: int = 3  # 1=높음, 5=낮음
     estimated_time: float = 0.0  # 예상 소요 시간 (초)
@@ -75,9 +75,9 @@ class AgentResponseEvent(BaseEvent):
 @dataclass
 class FrameProcessedEvent(BaseEvent):
     """프레임 처리 완료 이벤트"""
-    frame_id: int
-    processing_time: float  # 처리 시간 (초)
-    vad_score: float
+    frame_id: int = 0
+    processing_time: float = 0.0  # 처리 시간 (초)
+    vad_score: float = 0.0
     
     def __post_init__(self):
         if not self.event_id:
@@ -93,10 +93,10 @@ class FrameProcessedEvent(BaseEvent):
 @dataclass
 class StatsUpdatedEvent(BaseEvent):
     """통계 업데이트 이벤트"""
-    total_frames: int
-    anomaly_count: int
-    avg_processing_time: float
-    current_fps: float
+    total_frames: int = 0
+    anomaly_count: int = 0
+    avg_processing_time: float = 0.0
+    current_fps: float = 0.0
     
     def __post_init__(self):
         if not self.event_id:
@@ -112,11 +112,11 @@ class StatsUpdatedEvent(BaseEvent):
 @dataclass
 class PackageDetectedEvent(BaseEvent):
     """패키지 감지 이벤트 (Phase 3용)"""
-    package_id: str
-    is_new: bool
-    confidence: float
-    bbox: Tuple[int, int, int, int]  # [x, y, w, h]
-    frame_id: int
+    package_id: str = ""
+    bbox: Tuple[int, int, int, int] = (0, 0, 0, 0)  # (x1, y1, x2, y2)
+    confidence: float = 0.0
+    camera_id: int = 0
+    frame_index: int = 0
     
     def __post_init__(self):
         if not self.event_id:
@@ -132,8 +132,9 @@ class PackageDetectedEvent(BaseEvent):
 @dataclass
 class PackageDisappearedEvent(BaseEvent):
     """패키지 사라짐 이벤트 (Phase 3용)"""
-    package_id: str
-    picker_face_id: Optional[str] = None
+    package_id: str = ""
+    last_seen: str = ""
+    camera_id: int = 0
     
     def __post_init__(self):
         if not self.event_id:
@@ -149,8 +150,10 @@ class PackageDisappearedEvent(BaseEvent):
 @dataclass
 class TheftDetectedEvent(BaseEvent):
     """도난 감지 이벤트 (Phase 3용)"""
-    package_id: str
-    suspect_face_id: Optional[str] = None
+    package_id: str = ""
+    theft_time: str = ""
+    camera_id: int = 0
+    evidence_frame_paths: List[str] = field(default_factory=list)
     
     def __post_init__(self):
         if not self.event_id:
