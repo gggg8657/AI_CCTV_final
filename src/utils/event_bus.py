@@ -15,10 +15,10 @@ from dataclasses import dataclass
 @dataclass
 class BaseEvent:
     """이벤트 기본 클래스"""
-    event_id: str
-    event_type: str
-    timestamp: str
-    source: str
+    event_id: str = ""
+    event_type: str = ""
+    timestamp: str = ""
+    source: str = ""
 
 
 class EventBus:
@@ -193,11 +193,30 @@ class EventBus:
         # 이벤트 처리 태스크 시작
         try:
             loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                # 루프가 닫혀있으면 새로 생성
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
         except RuntimeError:
+            # 실행 중인 루프가 없으면 새로 생성
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
         
-        self._processing_task = loop.create_task(self._process_queue())
+        # 루프가 실행 중이 아니면 새 스레드에서 실행
+        if loop.is_running():
+            # 이미 실행 중인 루프에서는 태스크만 생성
+            self._processing_task = loop.create_task(self._process_queue())
+        else:
+            # 새 스레드에서 루프 실행
+            def run_loop():
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(self._process_queue())
+            
+            import threading
+            thread = threading.Thread(target=run_loop, daemon=True)
+            thread.start()
+            # 태스크는 루프가 시작된 후 생성되므로 None으로 설정
+            # 실제 처리는 스레드에서 실행됨
     
     def stop(self):
         """이벤트 버스 중지"""
@@ -219,6 +238,17 @@ class EventBus:
                         pass
             except (RuntimeError, Exception):
                 # 루프가 없거나 이미 닫힌 경우
+                pass
+        
+        # Queue에 남은 이벤트 처리 대기
+        if self._queue:
+            try:
+                # 남은 이벤트가 있으면 처리 대기 (최대 1초)
+                import time
+                start_time = time.time()
+                while not self._queue.empty() and (time.time() - start_time) < 1.0:
+                    time.sleep(0.1)
+            except Exception:
                 pass
         
         self._queue = None
