@@ -239,13 +239,18 @@ def test_register_core_functions_registers_all(registry, e2e_system):
     register_core_functions(registry, e2e_system)
 
     names = {item["function"]["name"] for item in registry.list_functions()}
-    assert names == {
+    expected_names = {
         "get_system_status",
         "get_recent_events",
         "get_anomaly_statistics",
         "update_vad_threshold",
         "enable_vlm",
+        # Phase 3: Package Detection functions
+        "get_package_count",
+        "get_package_details",
+        "get_activity_log",
     }
+    assert names == expected_names
 
     status = registry.call("get_system_status")
     assert status["ok"] is True
