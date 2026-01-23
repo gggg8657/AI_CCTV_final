@@ -119,82 +119,89 @@ class VLMAnalyzer:
                 raise FileNotFoundError(f"VLM mmproj 파일을 찾을 수 없습니다: {self.mmproj_path}")
             
             mode = "FAST" if self.optimize_speed else "DETAILED"
-            print(f"[VLM] Loading Qwen2.5-VL model ({mode} mode)...")
+            import logging
+            logging.info(f"[VLM] Loading Qwen2.5-VL model ({mode} mode)...")
             
-            # GPU 설정: VLM은 GPU 3번 사용 (거의 비어있음)
-            # CUDA_VISIBLE_DEVICES=3으로 설정되어 있으면 논리적 GPU 0 = 실제 GPU 3번
-            # llama.cpp는 논리적 GPU 번호를 사용하므로 main_gpu=0 사용
-            print(f"[VLM] Using logical GPU 0 (actual GPU 3) for VLM model")
+            # GPU 설정: llama.cpp는 논리적 GPU 번호를 사용
+            # CUDA_VISIBLE_DEVICES가 설정되어 있으면 논리적 GPU 0 = 실제 GPU N번
+            # 그렇지 않으면 main_gpu는 실제 GPU 번호를 사용
+            # gpu_id 파라미터를 사용하여 설정 (기본값: 2)
+            main_gpu = self.gpu_id
+            logging.info(f"[VLM] Using GPU {self.gpu_id} (main_gpu={main_gpu}) for VLM model")
             
             try:
-                # CUDA_VISIBLE_DEVICES=3이면 논리적 GPU 0 = 실제 GPU 3번
                 self.vlm = Llama(
                     model_path=self.model_path,
                     chat_handler=Qwen25VLChatHandler(clip_model_path=self.mmproj_path),
                     n_gpu_layers=-1,
                     n_ctx=self.n_ctx,
-                    main_gpu=0,  # 논리적 GPU 0 = 실제 GPU 3번
+                    main_gpu=main_gpu,
                     verbose=False
                 )
             except (RuntimeError, ValueError) as e:
                 if "out of memory" in str(e).lower() or "cuda" in str(e).lower() or "failed" in str(e).lower():
-                    print(f"[VLM] GPU 3 메모리 부족 또는 로드 실패. n_gpu_layers를 줄여서 재시도...")
+                    import logging
+                    logging.warning(f"[VLM] GPU {self.gpu_id} 메모리 부족 또는 로드 실패. n_gpu_layers를 줄여서 재시도...")
                     # GPU 레이어 수를 줄여서 재시도
                     self.vlm = Llama(
                         model_path=self.model_path,
                         chat_handler=Qwen25VLChatHandler(clip_model_path=self.mmproj_path),
                         n_gpu_layers=20,  # 일부 레이어만 GPU에 로드
                         n_ctx=self.n_ctx,
-                        main_gpu=0,  # 논리적 GPU 0 = 실제 GPU 3번
+                        main_gpu=main_gpu,
                         verbose=False
                     )
                 else:
                     raise
             
             self._initialized = True
-            print(f"[VLM] Model loaded on GPU 3 (n_ctx={self.n_ctx}, max_tokens={self.max_tokens})")
+            import logging
+            logging.info(f"[VLM] Model loaded on GPU {self.gpu_id} (n_ctx={self.n_ctx}, max_tokens={self.max_tokens})")
             return True
             
         except ImportError as e:
-            print(f"[VLM] llama_cpp가 설치되지 않았습니다: {e}")
+            import logging
+            logging.error(f"[VLM] llama_cpp가 설치되지 않았습니다: {e}")
             import traceback
             traceback.print_exc()
             return False
         except RuntimeError as e:
+            import logging
             error_msg = str(e).lower()
             if "out of memory" in error_msg or "cuda" in error_msg:
-                print(f"[VLM] GPU 메모리 부족으로 초기화 실패: {e}")
-                print(f"[VLM] n_gpu_layers를 줄여서 재시도...")
+                logging.warning(f"[VLM] GPU {self.gpu_id} 메모리 부족으로 초기화 실패: {e}")
+                logging.info(f"[VLM] n_gpu_layers를 줄여서 재시도...")
                 for n_layers in [20, 10, 5]:
                     try:
-                        print(f"[VLM] n_gpu_layers={n_layers}로 재시도...")
+                        logging.info(f"[VLM] n_gpu_layers={n_layers}로 재시도...")
                         self.vlm = Llama(
                             model_path=self.model_path,
                             chat_handler=Qwen25VLChatHandler(clip_model_path=self.mmproj_path),
                             n_gpu_layers=n_layers,
                             n_ctx=self.n_ctx,
-                            main_gpu=0,  # 논리적 GPU 0 = 실제 GPU 3번
+                            main_gpu=main_gpu,
                             verbose=False
                         )
                         self._initialized = True
-                        print(f"[VLM] Model loaded on GPU 3 with {n_layers} layers (n_ctx={self.n_ctx}, max_tokens={self.max_tokens})")
+                        logging.info(f"[VLM] Model loaded on GPU {self.gpu_id} with {n_layers} layers (n_ctx={self.n_ctx}, max_tokens={self.max_tokens})")
                         return True
                     except Exception as e2:
-                        print(f"[VLM] n_gpu_layers={n_layers} 재시도 실패: {e2}")
+                        logging.warning(f"[VLM] n_gpu_layers={n_layers} 재시도 실패: {e2}")
                         if n_layers == 5:
-                            print(f"[VLM] 모든 재시도 실패")
+                            logging.error(f"[VLM] 모든 재시도 실패")
                             import traceback
                             traceback.print_exc()
                             return False
                         continue
                 return False
             else:
-                print(f"[VLM] 초기화 실패: {e}")
+                logging.error(f"[VLM] 초기화 실패: {e}")
                 import traceback
                 traceback.print_exc()
                 return False
         except Exception as e:
-            print(f"[VLM] 초기화 실패: {e}")
+            import logging
+            logging.error(f"[VLM] 초기화 실패: {e}")
             import traceback
             traceback.print_exc()
             return False
