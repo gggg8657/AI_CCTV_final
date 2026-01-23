@@ -66,6 +66,13 @@ class EngineConfig:
     
     # 처리 설정
     target_fps: int = 30
+    
+    # Phase 3: Package Detection 설정
+    enable_package_detection: bool = False
+    package_detection_model: str = "yolo12n.pt"
+    package_detection_confidence: float = 0.7
+    package_tracker_max_age: int = 30
+    theft_confirmation_time: float = 3.0  # 초
 
 
 @dataclass
@@ -110,10 +117,17 @@ class E2EEngine:
         self.clip_saver: Optional[ClipSaver] = None
         self.event_logger: Optional[EventLogger] = None
         
+        # Phase 3: Package Detection 컴포넌트
+        self.package_detector = None  # BaseDetector
+        self.package_tracker = None  # BaseTracker
+        self.theft_detector = None  # BaseTheftDetector
+        self.event_bus = None  # EventBus (기존 시스템과 공유)
+        
         # 상태
         self.stats = EngineStats()
         self.is_running = False
         self._stop_event = threading.Event()
+        self._process_thread: Optional[threading.Thread] = None
         
         # 콜백
         self.on_frame_callback: Optional[Callable] = None
@@ -132,11 +146,22 @@ class E2EEngine:
     
     def initialize(self) -> bool:
         """엔진 초기화"""
-        print(f"[E2EEngine] 초기화 중...")
+        import logging
+        logging.info("[E2EEngine] 초기화 중...")
         
-        # 이벤트 로거
-        self.event_logger = EventLogger(self.config.logs_dir)
-        self.event_logger.log_info("E2E Engine initializing...")
+        try:
+            # 디렉토리 생성
+            Path(self.config.logs_dir).mkdir(parents=True, exist_ok=True)
+            if self.config.save_clips:
+                Path(self.config.clips_dir).mkdir(parents=True, exist_ok=True)
+            
+            # 이벤트 로거
+            self.event_logger = EventLogger(self.config.logs_dir)
+            self.event_logger.log_info("E2E Engine initializing...")
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to create directories: {e}")
+            return False
         
         # 클립 저장기
         if self.config.save_clips:
@@ -194,8 +219,13 @@ class E2EEngine:
         print(f"[E2EEngine] 초기화 완료")
         return True
     
-    def start(self):
-        """엔진 시작 (메인 루프)"""
+    def start(self, background: bool = True):
+        """
+        엔진 시작
+        
+        Args:
+            background: True면 백그라운드 스레드에서 실행, False면 동기 실행
+        """
         if self.is_running:
             return
         
@@ -203,25 +233,63 @@ class E2EEngine:
         self._stop_event.clear()
         self.stats = EngineStats()
         
-        self.event_logger.log_info("E2E Engine started")
-        print("[E2EEngine] 시작")
+        if self.event_logger:
+            self.event_logger.log_info("E2E Engine started")
         
-        self._process_loop()
+        import logging
+        logging.info("[E2EEngine] 시작")
+        
+        if background:
+            # 백그라운드 스레드에서 실행
+            self._process_thread = threading.Thread(target=self._run_loop_safe, daemon=True)
+            self._process_thread.start()
+        else:
+            # 동기 실행
+            self._run_loop_safe()
     
     def stop(self):
         """엔진 중지"""
         self._stop_event.set()
         self.is_running = False
         
+        # 스레드 종료 대기
+        if self._process_thread and self._process_thread.is_alive():
+            self._process_thread.join(timeout=2.0)
+        
         if self.video_source:
             self.video_source.close()
         
-        self.event_logger.log_info("E2E Engine stopped")
-        self.event_logger.log_info(f"Final stats: {self.stats.to_dict()}")
-        print("[E2EEngine] 중지")
+        if self.event_logger:
+            self.event_logger.log_info("E2E Engine stopped")
+            self.event_logger.log_info(f"Final stats: {self.stats.to_dict()}")
+        
+        import logging
+        logging.info("[E2EEngine] 중지")
+    
+    def _run_loop_safe(self):
+        """안전한 루프 실행 (예외 처리 포함)"""
+        try:
+            self._process_loop()
+        except Exception as e:
+            import logging
+            logging.error(f"Engine loop error: {e}", exc_info=True)
+            if self.event_logger:
+                self.event_logger.log_error(f"Engine loop error: {e}")
+        finally:
+            self.is_running = False
     
     def _process_loop(self):
         """메인 처리 루프"""
+        if not self.vad_model:
+            import logging
+            logging.error("VAD model not initialized")
+            return
+        
+        if not self.video_source:
+            import logging
+            logging.error("Video source not initialized")
+            return
+        
         fps_counter = 0
         fps_start_time = time.time()
         
@@ -248,15 +316,22 @@ class E2EEngine:
             self.frame_buffer.append(frame)
             
             # VAD 추론
-            vad_start = time.time()
-            score = self.vad_model.process_frame(frame)
-            if score is not None:
-                self._vad_times.append(time.time() - vad_start)
-                self.current_score = score
-                
-                # 이상 감지
-                if score >= self.config.vad_threshold:
-                    self._handle_anomaly(frame, score)
+            try:
+                vad_start = time.time()
+                score = self.vad_model.process_frame(frame)
+                if score is not None:
+                    self._vad_times.append(time.time() - vad_start)
+                    self.current_score = score
+                    
+                    # 이상 감지
+                    if score >= self.config.vad_threshold:
+                        self._handle_anomaly(frame, score)
+            except Exception as e:
+                import logging
+                logging.error(f"VAD processing error: {e}", exc_info=True)
+                if self.event_logger:
+                    self.event_logger.log_error(f"VAD processing error: {e}")
+                continue
             
             # FPS 계산
             if time.time() - fps_start_time >= 1.0:
@@ -275,9 +350,10 @@ class E2EEngine:
             
             # FPS 제한
             elapsed = time.time() - loop_start
-            target_time = 1.0 / self.config.target_fps
-            if elapsed < target_time:
-                time.sleep(target_time - elapsed)
+            if self.config.target_fps > 0:
+                target_time = 1.0 / self.config.target_fps
+                if elapsed < target_time:
+                    time.sleep(target_time - elapsed)
     
     def _handle_anomaly(self, frame: np.ndarray, vad_score: float):
         """이상 감지 처리"""
@@ -306,42 +382,59 @@ class E2EEngine:
     
     def _on_clip_saved(self, clip_path: str, clip_meta: Dict):
         """클립 저장 완료 콜백"""
-        print(f"[E2EEngine] 클립 저장 완료: {clip_path}")
+        import logging
+        logging.info(f"[E2EEngine] 클립 저장 완료: {clip_path}")
         
-        # VLM 분석
         vlm_result = None
-        if self.vlm_analyzer and self.vlm_analyzer.is_initialized:
-            print("[E2EEngine] VLM 분석 중...")
-            vlm_start = time.time()
-            vlm_result = self.vlm_analyzer.analyze(video_path=clip_path)
-            self._vlm_times.append(time.time() - vlm_start)
-            self.stats.avg_vlm_time = sum(self._vlm_times) / len(self._vlm_times)
-            
-            print(f"[VLM] 결과: {vlm_result.detected_type} ({vlm_result.latency_ms:.0f}ms)")
+        agent_result = None
         
-        # Agent 대응
-        if self.agent_flow:
-            print("[E2EEngine] Agent Flow 실행 중...")
-            agent_start = time.time()
-            agent_result = self.agent_flow.run(video_path=clip_path)
-            self._agent_times.append(time.time() - agent_start)
-            self.stats.avg_agent_time = sum(self._agent_times) / len(self._agent_times)
-            
-            print(f"[Agent] 결과: {agent_result.get('situation_type', 'Unknown')}")
+        try:
+            # VLM 분석
+            if self.vlm_analyzer and self.vlm_analyzer.is_initialized:
+                logging.info("[E2EEngine] VLM 분석 중...")
+                vlm_start = time.time()
+                vlm_result = self.vlm_analyzer.analyze(video_path=clip_path)
+                self._vlm_times.append(time.time() - vlm_start)
+                self.stats.avg_vlm_time = sum(self._vlm_times) / len(self._vlm_times)
+                
+                logging.info(f"[VLM] 결과: {vlm_result.detected_type} ({vlm_result.latency_ms:.0f}ms)")
+        except Exception as e:
+            logging.error(f"VLM analysis error: {e}", exc_info=True)
+            if self.event_logger:
+                self.event_logger.log_error(f"VLM analysis error: {e}")
+        
+        try:
+            # Agent 대응
+            if self.agent_flow:
+                logging.info("[E2EEngine] Agent Flow 실행 중...")
+                agent_start = time.time()
+                agent_result = self.agent_flow.run(video_path=clip_path)
+                self._agent_times.append(time.time() - agent_start)
+                self.stats.avg_agent_time = sum(self._agent_times) / len(self._agent_times)
+                
+                logging.info(f"[Agent] 결과: {agent_result.get('situation_type', 'Unknown')}")
+        except Exception as e:
+            logging.error(f"Agent flow error: {e}", exc_info=True)
+            if self.event_logger:
+                self.event_logger.log_error(f"Agent flow error: {e}")
         
         # 이벤트 로깅
-        event = AnomalyEvent(
-            id=clip_meta.get('timestamp', ''),
-            timestamp=clip_meta.get('trigger_time', ''),
-            frame_number=clip_meta.get('frame_number', 0),
-            vad_score=clip_meta.get('score', 0.0),
-            threshold=self.config.vad_threshold,
-            vlm_type=vlm_result.detected_type if vlm_result else "Unknown",
-            vlm_description=vlm_result.description if vlm_result else "",
-            vlm_confidence=vlm_result.confidence if vlm_result else 0.0,
-            clip_path=clip_path,
-        )
-        self.event_logger.log_event(event)
+        try:
+            if self.event_logger:
+                event = AnomalyEvent(
+                    id=clip_meta.get('timestamp', ''),
+                    timestamp=clip_meta.get('trigger_time', ''),
+                    frame_number=clip_meta.get('frame_number', 0),
+                    vad_score=clip_meta.get('score', 0.0),
+                    threshold=self.config.vad_threshold,
+                    vlm_type=vlm_result.detected_type if vlm_result else "Unknown",
+                    vlm_description=vlm_result.description if vlm_result else "",
+                    vlm_confidence=vlm_result.confidence if vlm_result else 0.0,
+                    clip_path=clip_path,
+                )
+                self.event_logger.log_event(event)
+        except Exception as e:
+            logging.error(f"Event logging error: {e}", exc_info=True)
     
     def get_stats(self) -> Dict:
         """통계 조회"""
