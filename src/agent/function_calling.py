@@ -241,6 +241,114 @@ def enable_vlm(e2e_system: "E2ESystem", enabled: bool) -> Dict[str, Any]:
         return {"ok": False, "error": f"Failed to update VLM setting: {exc}"}
 
 
+def get_package_count(e2e_system: "E2ESystem") -> Dict[str, Any]:
+    """현재 추적 중인 패키지 수 조회 (Phase 3)"""
+    try:
+        if e2e_system is None:
+            return {"ok": False, "error": "E2ESystem instance is required"}
+        
+        if not hasattr(e2e_system, 'package_tracker') or e2e_system.package_tracker is None:
+            return {
+                "ok": True,
+                "data": {
+                    "total": 0,
+                    "present": 0,
+                    "missing": 0,
+                    "stolen": 0,
+                },
+            }
+        
+        packages = e2e_system.package_tracker.get_all_packages()
+        counts = {"present": 0, "missing": 0, "stolen": 0}
+        for package in packages:
+            status = getattr(package, "status", "present")
+            if status in counts:
+                counts[status] += 1
+
+        return {
+            "ok": True,
+            "data": {
+                "total": len(packages),
+                "present": counts["present"],
+                "missing": counts["missing"],
+                "stolen": counts["stolen"],
+            }
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"Failed to get package count: {exc}"}
+
+
+def get_package_details(e2e_system: "E2ESystem", package_id: str) -> Dict[str, Any]:
+    """특정 패키지 상세 정보 조회 (Phase 3)"""
+    try:
+        if e2e_system is None:
+            return {"ok": False, "error": "E2ESystem instance is required"}
+        if not isinstance(package_id, str):
+            return {"ok": False, "error": "package_id must be a string"}
+        
+        if not hasattr(e2e_system, 'package_tracker') or e2e_system.package_tracker is None:
+            return {"ok": False, "error": "Package tracker not initialized"}
+        
+        package = e2e_system.package_tracker.get_package(package_id)
+        if not package:
+            return {"ok": False, "error": f"Package {package_id} not found"}
+        
+        first_seen = getattr(package, "first_seen_iso", None)
+        last_seen = getattr(package, "last_seen_iso", None)
+        current_position = getattr(package, "current_position", None)
+        detection_count = len(getattr(package, "detections", []))
+
+        return {
+            "ok": True,
+            "data": {
+                "package_id": package.package_id,
+                "first_seen": first_seen,
+                "last_seen": last_seen,
+                "status": getattr(package, "status", "present"),
+                "current_position": current_position,
+                "detection_count": detection_count,
+            }
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"Failed to get package details: {exc}"}
+
+
+def get_activity_log(e2e_system: "E2ESystem", limit: int = 10) -> Dict[str, Any]:
+    """최근 패키지 활동 로그 조회 (Phase 3)"""
+    try:
+        if e2e_system is None:
+            return {"ok": False, "error": "E2ESystem instance is required"}
+        if not isinstance(limit, int):
+            return {"ok": False, "error": "limit must be an integer"}
+        if limit <= 0:
+            return {"ok": False, "error": "limit must be greater than 0"}
+        
+        event_bus = getattr(e2e_system, "event_bus", None)
+        if event_bus is None:
+            return {"ok": False, "error": "EventBus is not available"}
+        
+        # Package 관련 이벤트만 필터링
+        history = event_bus.get_history(limit=limit * 2)
+        package_events = [
+            e for e in history 
+            if getattr(e, "event_type", "") in [
+                "PackageDetectedEvent", 
+                "PackageDisappearedEvent", 
+                "TheftDetectedEvent"
+            ]
+        ][:limit]
+        
+        return {
+            "ok": True,
+            "data": {
+                "activities": [_event_to_dict(e) for e in package_events],
+                "total": len(package_events),
+            }
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"Failed to get activity log: {exc}"}
+
+
 def register_core_functions(
     registry: FunctionRegistry,
     e2e_system: "E2ESystem",
@@ -303,4 +411,43 @@ def register_core_functions(
             "required": ["enabled"],
         },
         func=partial(enable_vlm, e2e_system),
+    )
+    # Phase 3: Package Detection functions
+    registry.register(
+        name="get_package_count",
+        description="Get the count of currently tracked packages.",
+        parameters={"type": "object", "properties": {}, "required": []},
+        func=partial(get_package_count, e2e_system),
+    )
+    registry.register(
+        name="get_package_details",
+        description="Get detailed information about a specific package.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "package_id": {
+                    "type": "string",
+                    "description": "The ID of the package to query.",
+                }
+            },
+            "required": ["package_id"],
+        },
+        func=partial(get_package_details, e2e_system),
+    )
+    registry.register(
+        name="get_activity_log",
+        description="Get recent package activity log (detections, disappearances, thefts).",
+        parameters={
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of events to return.",
+                    "default": 10,
+                    "minimum": 1,
+                }
+            },
+            "required": [],
+        },
+        func=partial(get_activity_log, e2e_system),
     )
