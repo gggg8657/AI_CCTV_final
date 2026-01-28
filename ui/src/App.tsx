@@ -16,6 +16,7 @@ import { AIAnalysisPanel } from "./components/AIAnalysisPanel";
 import { StatsDashboard } from "./components/StatsDashboard";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { AIAgentPanel } from "./components/AIAgentPanel";
+import { PackageDetectionPanel } from "./components/PackageDetectionPanel";
 import {
   Camera,
   BarChart3,
@@ -26,12 +27,14 @@ import {
   Home,
   LogOut,
   Bot,
+  Package,
 } from "lucide-react";
 
 const menuItems = [
   { id: "live", label: "실시간 모니터링", icon: Camera },
   { id: "analysis", label: "AI 분석", icon: Brain },
   { id: "agent", label: "AI 어시스턴트", icon: Bot },
+  { id: "packages", label: "패키지 감지", icon: Package },
   { id: "stats", label: "통계 및 리포트", icon: BarChart3 },
   { id: "settings", label: "설정", icon: Settings },
 ];
@@ -99,6 +102,18 @@ export default function App() {
         );
       case "agent":
         return <AIAgentPanel />;
+      case "packages":
+        return (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold">패키지 감지 및 도난 방지</h1>
+              <p className="text-muted-foreground">
+                실시간 패키지 감지 상태와 도난 이벤트를 모니터링합니다
+              </p>
+            </div>
+            <PackageDetectionPanel />
+          </div>
+        );
       case "stats":
         return (
           <div className="space-y-6">
