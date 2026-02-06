@@ -73,6 +73,18 @@ from src.agent.function_calling import (
     register_core_functions,
 )
 
+# Package Detection 시스템 import (Phase 3)
+from src.package_detection import (
+    PackageDetector,
+    PackageTracker,
+    TheftDetector,
+)
+from src.utils.events import (
+    PackageDetectedEvent,
+    PackageDisappearedEvent,
+    TheftDetectedEvent,
+)
+
 
 # =============================================================================
 # 설정 및 상수
@@ -146,6 +158,13 @@ class SystemConfig:
     target_fps: int = 30
     display_width: int = 640
     display_height: int = 480
+    
+    # Package Detection 설정 (Phase 3)
+    enable_package_detection: bool = True
+    package_model: str = "yolo12n.pt"
+    package_confidence: float = 0.5
+    package_tracker_max_age: float = 30.0
+    theft_confirmation_time: float = 3.0
 
 
 @dataclass
@@ -872,6 +891,11 @@ class E2ESystem:
         # Function Calling 시스템 (신규)
         self.function_registry: Optional[FunctionRegistry] = None
         
+        # Package Detection 시스템 (Phase 3)
+        self.package_detector: Optional[PackageDetector] = None
+        self.package_tracker: Optional[PackageTracker] = None
+        self.theft_detector: Optional[TheftDetector] = None
+        
         # 콜백 (하위 호환성 유지)
         self.on_frame_callback: Optional[Callable] = None
         self.on_anomaly_callback: Optional[Callable] = None
@@ -985,6 +1009,37 @@ class E2ESystem:
             self.logger.log_info("FunctionRegistry initialized with core functions")
         except Exception as e:
             self.logger.log_warning(f"FunctionRegistry initialization failed: {e}")
+        
+        # Package Detection 시스템 초기화 (Phase 3)
+        if self.config.enable_package_detection:
+            try:
+                # YOLO 기반 패키지 감지기
+                self.package_detector = PackageDetector(
+                    model_path=self.config.package_model,
+                    device="cuda" if HAS_TORCH and torch.cuda.is_available() else "cpu",
+                    confidence_threshold=self.config.package_confidence,
+                )
+                
+                # 패키지 추적기
+                self.package_tracker = PackageTracker(
+                    max_age=self.config.package_tracker_max_age,
+                    event_bus=self.event_bus,
+                    camera_id=0,
+                )
+                
+                # 도난 감지기
+                self.theft_detector = TheftDetector(
+                    confirmation_time=self.config.theft_confirmation_time,
+                    event_bus=self.event_bus,
+                    camera_id=0,
+                )
+                
+                self.logger.log_info("Package Detection system initialized")
+            except Exception as e:
+                self.logger.log_warning(f"Package Detection initialization failed: {e}")
+                self.package_detector = None
+                self.package_tracker = None
+                self.theft_detector = None
         
         self.logger.log_info("E2E System initialized successfully")
         return True, None
@@ -1182,6 +1237,27 @@ class E2ESystem:
                 
                 vad_times.append(vad_time)
                 self.current_score = vad_score
+                
+                # Package Detection (Phase 3)
+                if self.package_detector and self.package_tracker and self.theft_detector:
+                    try:
+                        import time as time_module
+                        mono_ts = time_module.monotonic()
+                        
+                        # 패키지 감지
+                        detections = self.package_detector.detect(frame)
+                        
+                        # 패키지 추적
+                        tracked_packages = self.package_tracker.track(detections, mono_ts)
+                        
+                        # 도난 감지
+                        theft_event = self.theft_detector.check_theft(tracked_packages, mono_ts)
+                        
+                        if theft_event:
+                            self.logger.log_warning(f"[THEFT] Package {theft_event.package_id} stolen!")
+                    except Exception as e:
+                        if self.stats.total_frames <= 10:
+                            self.logger.log_warning(f"Package detection error: {e}")
                 
                 # 이상 감지
                 if vad_score >= self.config.vad_threshold:
@@ -1391,6 +1467,32 @@ class E2ESystem:
     def get_function_registry(self) -> Optional[FunctionRegistry]:
         """Function Registry 반환"""
         return self.function_registry
+    
+    def get_package_tracker(self) -> Optional[PackageTracker]:
+        """Package Tracker 반환 (Phase 3)"""
+        return self.package_tracker
+    
+    def get_tracked_packages(self) -> List:
+        """추적 중인 패키지 목록 반환 (Phase 3)"""
+        if self.package_tracker:
+            return self.package_tracker.get_all_packages()
+        return []
+    
+    def get_package_count(self) -> Dict:
+        """패키지 통계 반환 (Phase 3)"""
+        if not self.package_tracker:
+            return {"total": 0, "present": 0, "missing": 0, "stolen": 0}
+        
+        packages = self.package_tracker.get_all_packages()
+        stats = {"total": len(packages), "present": 0, "missing": 0, "stolen": 0}
+        for pkg in packages:
+            if pkg.status == "present":
+                stats["present"] += 1
+            elif pkg.status == "missing":
+                stats["missing"] += 1
+            elif pkg.status == "stolen":
+                stats["stolen"] += 1
+        return stats
 
 
 # =============================================================================

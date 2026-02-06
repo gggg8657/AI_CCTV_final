@@ -42,3 +42,9 @@ vlm:
   model_path: ''
   n_frames: 4
   optimize: true
+package_detection:
+  enabled: true
+  model: yolo12n.pt
+  confidence: 0.5
+  tracker_max_age: 30
+  theft_confirmation_time: 3.0

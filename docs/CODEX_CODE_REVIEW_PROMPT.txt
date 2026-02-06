@@ -1,0 +1,102 @@
+[GOAL]
+기존 코드베이스를 코드 개발자 관점에서 리뷰하고 개선 제안을 제시합니다.
+
+[CONTEXT]
+AI_CCTV_final 프로젝트의 기존 구현 코드입니다.
+
+프로젝트 구조:
+- src/pipeline/engine.py: E2E 파이프라인 엔진 (VAD + VLM + Agent 통합)
+- src/agent/base.py: Agent 기본 컴포넌트 (LLMManager, VideoAnalysisAgent 등)
+- src/utils/event_bus.py: EventBus 시스템
+- src/utils/events.py: 이벤트 타입 정의
+- src/vad/: VAD 모델들 (mnad, stae, memae, flow_net2, attribute_based 등)
+- src/vlm/: VLM 분석기들 (analyzer.py, analyzer_lightweight.py, analyzer_quantized.py)
+- src/database/: 데이터베이스 모델 및 연결
+- app/api/: FastAPI 라우터들
+
+기술 스택:
+- Python 3.9+
+- PyTorch
+- FastAPI
+- OpenCV
+- Qwen2.5-VL-7B (Vision LLM)
+- Qwen3-8B (Text LLM)
+
+[INPUTS]
+다음 파일들을 검토해주세요:
+- src/pipeline/engine.py: E2E 파이프라인 엔진
+- src/agent/base.py: Agent 기본 컴포넌트
+- src/utils/event_bus.py: EventBus 구현
+- src/utils/events.py: 이벤트 타입 정의
+- src/vad/base.py: VAD 베이스 클래스
+- src/vlm/analyzer.py: VLM 분석기
+- src/database/models.py: 데이터베이스 모델
+- app/api/main.py: FastAPI 메인 앱
+
+[CONSTRAINTS]
+- 코드 개발자 관점에서 실용적인 피드백 제공
+- SOLID 원칙 준수 여부 검토
+- 코드 품질 및 가독성 평가
+- 성능 및 메모리 사용량 고려사항
+- 에러 처리 및 예외 처리 적절성
+- 테스트 가능성 및 유지보수성
+- 구체적이고 실행 가능한 개선 제안
+
+[OUTPUTS]
+다음 항목에 대한 의견을 제공해주세요:
+
+1. **아키텍처 및 설계**
+   - 컴포넌트 분리 적절성
+   - 의존성 관리
+   - 확장성 고려사항
+   - 모듈 간 결합도
+
+2. **SOLID 원칙 준수**
+   - SRP: 각 클래스의 책임 분리
+   - OCP: 확장 가능성
+   - LSP: 상속 관계 적절성
+   - ISP: 인터페이스 분리
+   - DIP: 의존성 역전
+
+3. **코드 품질**
+   - 타입 힌트 완전성
+   - Docstring 완전성
+   - 코드 가독성
+   - 중복 코드 제거
+   - 네이밍 컨벤션
+
+4. **에러 처리 및 예외 처리**
+   - 예외 처리 적절성
+   - 에러 메시지 명확성
+   - 로깅 전략
+   - 리소스 정리 (try-finally, context manager)
+
+5. **성능 고려사항**
+   - 메모리 사용량
+   - CPU/GPU 활용
+   - 병목 지점
+   - 최적화 가능 영역
+
+6. **테스트 가능성**
+   - 단위 테스트 작성 용이성
+   - Mock 가능성
+   - 의존성 주입 가능성
+
+7. **구체적인 개선 제안**
+   - 우선순위가 있는 개선 사항 (P0, P1, P2)
+   - 코드 예시 포함
+   - 리팩토링 제안
+
+[VALIDATION]
+- 구체적이고 실행 가능한 피드백
+- 코드 예시 포함 (필요시)
+- 우선순위가 있는 개선 제안
+- 실용적인 개발자 관점의 의견
+
+[REQUEST]
+위 파일들을 검토하고, 코드 개발자로서 기존 코드베이스에 대한 상세한 리뷰를 제시해주세요.
+특히 다음 사항에 중점을 두어주세요:
+- SOLID 원칙 준수 여부
+- 코드 품질 및 유지보수성
+- 성능 및 확장성
+- 구체적인 개선 제안 및 리팩토링 방향
