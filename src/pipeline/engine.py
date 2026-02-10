@@ -23,6 +23,8 @@ from ..vlm import VLMAnalyzer
 from ..agent import create_flow as create_agent_flow
 from ..utils.video import VideoSource, VideoSourceType
 from ..utils.logging import EventLogger, AnomalyEvent
+from ..utils.event_bus import EventBus
+from ..package_detection import PackageDetector, PackageTracker, TheftDetector
 from .clip_saver import ClipSaver
 
 
@@ -143,6 +145,7 @@ class E2EEngine:
         self._vad_times: deque = deque(maxlen=100)
         self._vlm_times: deque = deque(maxlen=10)
         self._agent_times: deque = deque(maxlen=10)
+        self._package_detection_times: deque = deque(maxlen=100)
     
     def initialize(self) -> bool:
         """엔진 초기화"""
@@ -215,6 +218,59 @@ class E2EEngine:
             else:
                 self.event_logger.log_warning("Agent flow load failed")
         
+        # Phase 3: Package Detection 초기화
+        if self.config.enable_package_detection:
+            try:
+                # EventBus 생성 및 시작
+                self.event_bus = EventBus(max_history=1000)
+                self.event_bus.start()
+                self.event_logger.log_info("EventBus started for package detection")
+                
+                # PackageDetector 초기화
+                device = "cuda" if self.config.gpu_id >= 0 else "cpu"
+                self.package_detector = PackageDetector(
+                    model_path=self.config.package_detection_model,
+                    device=device,
+                    confidence_threshold=self.config.package_detection_confidence,
+                )
+                if self.package_detector.load_model():
+                    self.event_logger.log_info(f"Package detector loaded: {self.config.package_detection_model}")
+                else:
+                    self.event_logger.log_error("Package detector load failed")
+                    self.package_detector = None
+                
+                # PackageTracker 초기화
+                if self.package_detector:
+                    camera_id = getattr(self.video_source, 'camera_id', 0) if self.video_source else 0
+                    self.package_tracker = PackageTracker(
+                        iou_threshold=0.3,
+                        max_age=float(self.config.package_tracker_max_age),
+                        missing_threshold=1.0,
+                        history_size=50,
+                        event_bus=self.event_bus,
+                        camera_id=camera_id,
+                    )
+                    self.event_logger.log_info("Package tracker initialized")
+                
+                # TheftDetector 초기화
+                if self.package_tracker:
+                    camera_id = getattr(self.video_source, 'camera_id', 0) if self.video_source else 0
+                    self.theft_detector = TheftDetector(
+                        confirmation_time=self.config.theft_confirmation_time,
+                        evidence_buffer_size=10,
+                        event_bus=self.event_bus,
+                        camera_id=camera_id,
+                    )
+                    self.event_logger.log_info("Theft detector initialized")
+            except Exception as e:
+                import logging
+                logging.error(f"Phase 3 initialization error: {e}", exc_info=True)
+                self.event_logger.log_error(f"Phase 3 initialization error: {e}")
+                # Phase 3 실패해도 엔진은 계속 실행
+                self.package_detector = None
+                self.package_tracker = None
+                self.theft_detector = None
+        
         self.event_logger.log_info("E2E Engine initialized successfully")
         print(f"[E2EEngine] 초기화 완료")
         return True
@@ -255,6 +311,16 @@ class E2EEngine:
         # 스레드 종료 대기
         if self._process_thread and self._process_thread.is_alive():
             self._process_thread.join(timeout=2.0)
+        
+        # Phase 3: EventBus 정지
+        if self.event_bus:
+            try:
+                self.event_bus.stop()
+                import logging
+                logging.info("[E2EEngine] EventBus stopped")
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to stop EventBus: {e}", exc_info=True)
         
         if self.video_source:
             self.video_source.close()
@@ -314,6 +380,34 @@ class E2EEngine:
             
             # 프레임 버퍼에 추가
             self.frame_buffer.append(frame)
+            
+            # Phase 3: Package Detection (매 프레임마다 실행)
+            if self.config.enable_package_detection and self.package_detector and self.package_tracker:
+                try:
+                    package_start = time.time()
+                    monotonic_ts = time.monotonic()
+                    
+                    # 패키지 감지
+                    detections = self.package_detector.detect(frame)
+                    
+                    # 패키지 트래킹
+                    tracked_packages = self.package_tracker.track(detections, monotonic_ts)
+                    
+                    # 도난 감지
+                    if self.theft_detector:
+                        theft_event = self.theft_detector.check_theft(tracked_packages, monotonic_ts)
+                        if theft_event:
+                            import logging
+                            logging.warning(f"[Theft] Package {theft_event.package_id} stolen detected!")
+                            if self.event_logger:
+                                self.event_logger.log_warning(f"Theft detected: {theft_event.package_id}")
+                    
+                    self._package_detection_times.append(time.time() - package_start)
+                except Exception as e:
+                    import logging
+                    logging.error(f"Package detection error: {e}", exc_info=True)
+                    if self.event_logger:
+                        self.event_logger.log_error(f"Package detection error: {e}")
             
             # VAD 추론
             try:
@@ -384,6 +478,13 @@ class E2EEngine:
         """클립 저장 완료 콜백"""
         import logging
         logging.info(f"[E2EEngine] 클립 저장 완료: {clip_path}")
+        
+        # Phase 3: Evidence frame 경로 추가
+        if self.config.enable_package_detection and self.theft_detector and clip_path:
+            try:
+                self.theft_detector.add_evidence_frame(clip_path)
+            except Exception as e:
+                logging.error(f"Failed to add evidence frame: {e}", exc_info=True)
         
         vlm_result = None
         agent_result = None
