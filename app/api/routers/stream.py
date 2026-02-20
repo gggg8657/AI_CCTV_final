@@ -25,9 +25,12 @@ async def websocket_camera_stream(websocket: WebSocket, camera_id: int):
     channel = f"camera:{camera_id}"
     await ws_manager.connect(websocket, channel)
     try:
+        await websocket.send_json({"type": "connected", "camera_id": camera_id, "channel": channel})
         while True:
             data = await websocket.receive_text()
     except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, channel)
+    except Exception:
         ws_manager.disconnect(websocket, channel)
 
 

@@ -1,9 +1,119 @@
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Camera as CameraIcon, AlertTriangle, Play, Pause, Maximize, RefreshCw, Loader2 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { Camera as CameraIcon, Play, Pause, RefreshCw, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { cameras, Camera } from "../lib/api";
+
+function CameraStream({ cameraId }: { cameraId: number }) {
+  const [frame, setFrame] = useState<string | null>(null);
+  const [vadScore, setVadScore] = useState(0);
+  const [wsState, setWsState] = useState<"connecting" | "connected" | "streaming" | "error">("connecting");
+  const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let closed = false;
+
+    const connect = () => {
+      if (closed) return;
+      setWsState("connecting");
+
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${proto}//${window.location.host}/ws/stream/${cameraId}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        if (!closed) setWsState("connected");
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === "connected") {
+            if (!closed) setWsState("connected");
+          } else if (data.type === "frame" && data.jpeg) {
+            if (!closed) {
+              setFrame(`data:image/jpeg;base64,${data.jpeg}`);
+              setVadScore(data.vad_score ?? 0);
+              setWsState("streaming");
+            }
+          }
+        } catch {
+          /* ignore parse errors */
+        }
+      };
+
+      ws.onerror = () => {
+        if (!closed) setWsState("error");
+      };
+
+      ws.onclose = () => {
+        if (!closed) {
+          setWsState("connecting");
+          setTimeout(connect, 2000);
+        }
+      };
+
+      wsRef.current = ws;
+    };
+
+    connect();
+
+    return () => {
+      closed = true;
+      if (ws) ws.close();
+    };
+  }, [cameraId]);
+
+  const stateLabel: Record<string, string> = {
+    connecting: "서버 연결 중...",
+    connected: "프레임 수신 대기 중...",
+    error: "연결 오류 — 재시도 중...",
+  };
+
+  return (
+    <>
+      {frame && wsState === "streaming" ? (
+        <img
+          src={frame}
+          alt={`Camera ${cameraId}`}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+          <div className="text-center text-muted-foreground">
+            {wsState === "error" ? (
+              <CameraIcon className="h-6 w-6 mx-auto mb-1 text-red-400" />
+            ) : (
+              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-1" />
+            )}
+            <p className="text-xs">{stateLabel[wsState] ?? "연결 중..."}</p>
+          </div>
+        </div>
+      )}
+      <div className="absolute top-2 left-2 flex items-center gap-2">
+        {wsState === "streaming" && (
+          <Badge variant="destructive" className="text-xs">
+            <div className="w-2 h-2 bg-white rounded-full mr-1 animate-pulse" />
+            LIVE
+          </Badge>
+        )}
+        {wsState === "connected" && (
+          <Badge variant="secondary" className="text-xs">WS 연결됨</Badge>
+        )}
+        {vadScore > 0 && (
+          <Badge
+            variant={vadScore >= 0.5 ? "destructive" : "secondary"}
+            className="text-xs font-mono"
+          >
+            VAD {vadScore.toFixed(2)}
+          </Badge>
+        )}
+      </div>
+    </>
+  );
+}
 
 export function LiveCameraGrid() {
   const [cams, setCams] = useState<Camera[]>([]);
@@ -98,17 +208,7 @@ export function LiveCameraGrid() {
             <CardContent className="space-y-3">
               <div className="relative aspect-video bg-muted rounded-lg overflow-hidden flex items-center justify-center">
                 {isActive ? (
-                  <>
-                    <div className="absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                      <CameraIcon className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                    <div className="absolute top-2 left-2">
-                      <Badge variant="destructive" className="text-xs">
-                        <div className="w-2 h-2 bg-white rounded-full mr-1 animate-pulse" />
-                        LIVE
-                      </Badge>
-                    </div>
-                  </>
+                  <CameraStream cameraId={cam.id} />
                 ) : (
                   <CameraIcon className="h-8 w-8 text-muted-foreground" />
                 )}

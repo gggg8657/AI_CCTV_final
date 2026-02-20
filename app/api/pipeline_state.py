@@ -8,7 +8,7 @@ FastAPI lifespan에서 초기화되며, 의존성 주입으로 라우터에 전�
 import asyncio
 import logging
 import os
-from typing import Optional
+from typing import Dict, Optional
 
 from src.pipeline.multi_camera_manager import MultiCameraManager
 from src.database.event_logger import AsyncEventLogger
@@ -25,10 +25,10 @@ _notifier: Optional[NotificationEngine] = None
 _loop: Optional[asyncio.AbstractEventLoop] = None
 
 
-def init_pipeline() -> MultiCameraManager:
-    """앱 시작 시 1회 호출"""
+def init_pipeline(loop: Optional[asyncio.AbstractEventLoop] = None) -> MultiCameraManager:
+    """앱 시작 시 1회 호출. loop은 async context에서 get_running_loop()으로 전달."""
     global _manager, _event_logger, _notifier, _loop
-    _loop = asyncio.get_event_loop()
+    _loop = loop or asyncio.get_event_loop()
 
     use_dummy = os.getenv("PIPELINE_DUMMY", "true").lower() in ("1", "true", "yes")
     use_dummy_vad = os.getenv("PIPELINE_DUMMY_VAD")
@@ -49,6 +49,7 @@ def init_pipeline() -> MultiCameraManager:
         use_dummy_agent=_parse_bool(use_dummy_agent),
     )
     _manager.set_anomaly_callback(_on_anomaly)
+    _manager.set_frame_callback(_on_frame)
 
     _event_logger = AsyncEventLogger()
     _event_logger.start()
@@ -117,3 +118,41 @@ def _on_anomaly(event_data: dict) -> None:
 async def _ws_broadcast_anomaly(event_data: dict) -> None:
     from app.api.websocket.manager import ws_manager
     await ws_manager.broadcast("events", {"type": "anomaly", **event_data})
+
+
+_frame_log_counter: Dict[int, int] = {}
+
+
+def _on_frame(camera_id: int, frame, vad_score: float, b64_jpeg: str = None) -> None:
+    """파이프라인 스레드에서 호출 — base64 프레임을 WebSocket으로 전송"""
+    if not b64_jpeg:
+        return
+    if not _loop:
+        logger.warning("_on_frame: event loop not captured yet")
+        return
+    if not _loop.is_running():
+        logger.warning("_on_frame: event loop is not running")
+        return
+
+    cnt = _frame_log_counter.get(camera_id, 0) + 1
+    _frame_log_counter[camera_id] = cnt
+    if cnt <= 3 or cnt % 50 == 0:
+        logger.info("_on_frame cam=%d: sending frame #%d (b64 len=%d)", camera_id, cnt, len(b64_jpeg))
+
+    asyncio.run_coroutine_threadsafe(
+        _ws_broadcast_frame(camera_id, vad_score, b64_jpeg), _loop
+    )
+
+
+async def _ws_broadcast_frame(camera_id: int, vad_score: float, b64_jpeg: str) -> None:
+    from app.api.websocket.manager import ws_manager
+    channel = f"camera:{camera_id}"
+    conns = ws_manager.channel_counts.get(channel, 0)
+    if conns == 0:
+        return
+    await ws_manager.broadcast(channel, {
+        "type": "frame",
+        "camera_id": camera_id,
+        "vad_score": round(vad_score, 4),
+        "jpeg": b64_jpeg,
+    })

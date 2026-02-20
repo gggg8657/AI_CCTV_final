@@ -6,12 +6,15 @@ CameraPipeline — 카메라별 독립 처리 파이프라인
 ResourcePool에서 공유 모델을 획득하여 VAD → VLM → Agent 처리를 수행.
 """
 
+import base64
 import logging
 import threading
 import time
 from collections import deque
 from datetime import datetime
 from typing import Optional, Callable, Dict, Any
+
+import numpy as np
 
 from .camera_config import CameraConfig, CameraStatus, PipelineState
 from .resource_pool import ResourcePool
@@ -23,6 +26,19 @@ try:
     HAS_CV2 = True
 except ImportError:
     HAS_CV2 = False
+
+
+def encode_frame_jpeg(frame: Any, quality: int = 50) -> Optional[str]:
+    """numpy 프레임 → base64 JPEG 문자열"""
+    if not HAS_CV2 or frame is None:
+        return None
+    if not isinstance(frame, np.ndarray):
+        return None
+    try:
+        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        return base64.b64encode(buf).decode("ascii")
+    except Exception:
+        return None
 
 
 class CameraPipeline:
@@ -93,9 +109,16 @@ class CameraPipeline:
         if not HAS_CV2:
             raise RuntimeError("OpenCV (cv2) is required for non-dummy sources")
 
-        cap = cv2.VideoCapture(self.config.source_path)
+        source = self.config.source_path
+        if self.config.source_type == "webcam":
+            try:
+                source = int(source)
+            except (ValueError, TypeError):
+                source = 0
+
+        cap = cv2.VideoCapture(source)
         if not cap.isOpened():
-            raise RuntimeError(f"Cannot open source: {self.config.source_path}")
+            raise RuntimeError(f"Cannot open source: {source}")
         return cap
 
     def _process_loop(self) -> None:
@@ -110,6 +133,8 @@ class CameraPipeline:
 
         fps_counter = 0
         fps_start = time.time()
+        last_ws_send = 0.0
+        ws_interval = 0.2
 
         try:
             while not self._stop_event.is_set():
@@ -132,7 +157,14 @@ class CameraPipeline:
                     score = vad_model.process_frame(frame)
 
                 if self.on_frame:
-                    self.on_frame(self.config.camera_id, frame, score or 0.0)
+                    now_ts = time.time()
+                    if now_ts - last_ws_send >= ws_interval:
+                        b64 = encode_frame_jpeg(frame, quality=50)
+                        if b64:
+                            last_ws_send = now_ts
+                    else:
+                        b64 = None
+                    self.on_frame(self.config.camera_id, frame, score or 0.0, b64)
 
                 if score is not None and score >= self.config.vad_threshold:
                     self.status.anomaly_count += 1

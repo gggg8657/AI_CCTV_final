@@ -2,6 +2,8 @@
 FastAPI 메인 애플리케이션
 """
 
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -19,7 +21,7 @@ from app.api.pipeline_state import init_pipeline, shutdown_pipeline  # noqa: E40
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    init_pipeline()
+    init_pipeline(loop=asyncio.get_running_loop())
     print("API server started — DB + Pipeline initialised")
     yield
     shutdown_pipeline()
