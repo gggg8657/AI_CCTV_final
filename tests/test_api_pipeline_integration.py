@@ -26,9 +26,13 @@ _token = None
 def setup_module():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
-    from app.api.pipeline_state import _manager, init_pipeline
-    if _manager is None:
-        init_pipeline()
+    import app.api.pipeline_state as ps
+    if ps._manager is not None:
+        ps.shutdown_pipeline()
+        ps._manager = None
+        ps._event_logger = None
+        ps._notifier = None
+    ps.init_pipeline()
 
     client.post("/api/v1/auth/register", json={
         "username": "testadmin", "email": "t@t.com", "password": "pass123"
@@ -52,13 +56,18 @@ def test_create_dummy_camera():
 
 
 def test_start_camera_runs_pipeline():
-    r = client.post("/api/v1/cameras/1/start", headers=h())
+    # Use the dummy camera we just created — get its actual id
+    r = client.get("/api/v1/cameras/", headers=h())
+    cams = [c for c in r.json() if c["source_type"] == "dummy"]
+    cam_id = cams[0]["id"]
+
+    r = client.post(f"/api/v1/cameras/{cam_id}/start", headers=h())
     assert r.status_code == 200
     assert r.json()["status"] == "active"
 
     time.sleep(1.5)
 
-    r = client.get("/api/v1/cameras/1/pipeline-status", headers=h())
+    r = client.get(f"/api/v1/cameras/{cam_id}/pipeline-status", headers=h())
     assert r.status_code == 200
     data = r.json()
     assert data["state"] == "running"
@@ -75,13 +84,17 @@ def test_pipeline_overview():
 
 
 def test_stop_camera_stops_pipeline():
-    r = client.post("/api/v1/cameras/1/stop", headers=h())
+    r = client.get("/api/v1/cameras/", headers=h())
+    cams = [c for c in r.json() if c["source_type"] == "dummy"]
+    cam_id = cams[0]["id"]
+
+    r = client.post(f"/api/v1/cameras/{cam_id}/stop", headers=h())
     assert r.status_code == 200
     assert r.json()["status"] == "inactive"
 
     time.sleep(0.5)
 
-    r = client.get("/api/v1/cameras/1/pipeline-status", headers=h())
+    r = client.get(f"/api/v1/cameras/{cam_id}/pipeline-status", headers=h())
     assert r.status_code == 200
     assert r.json()["state"] == "idle"
 
@@ -95,8 +108,12 @@ def test_health_includes_pipeline():
 
 
 def test_delete_camera_removes_pipeline():
-    r = client.delete("/api/v1/cameras/1", headers=h())
+    r = client.get("/api/v1/cameras/", headers=h())
+    cams = [c for c in r.json() if c["source_type"] == "dummy"]
+    cam_id = cams[0]["id"]
+
+    r = client.delete(f"/api/v1/cameras/{cam_id}", headers=h())
     assert r.status_code == 204
 
-    r = client.get("/api/v1/cameras/1/pipeline-status", headers=h())
+    r = client.get(f"/api/v1/cameras/{cam_id}/pipeline-status", headers=h())
     assert r.status_code == 404

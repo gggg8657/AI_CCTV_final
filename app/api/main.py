@@ -11,7 +11,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.api.routers import auth, cameras, events, stats, stream  # noqa: E402
+from app.api.routers import auth, cameras, events, stats, stream, notifications  # noqa: E402
 from src.database.db import init_db  # noqa: E402
 from app.api.pipeline_state import init_pipeline, shutdown_pipeline  # noqa: E402
 
@@ -46,6 +46,7 @@ app.include_router(cameras.router, prefix="/api/v1/cameras", tags=["카메라"])
 app.include_router(events.router, prefix="/api/v1/events", tags=["이벤트"])
 app.include_router(stats.router, prefix="/api/v1/stats", tags=["통계"])
 app.include_router(stream.router, prefix="/ws", tags=["스트리밍"])
+app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["알림"])
 
 
 @app.get("/")
