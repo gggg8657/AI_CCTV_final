@@ -1,132 +1,83 @@
 # 작업 진행 상황
 
-**작성일**: 2025-01-21
+**최종 업데이트**: 2026-02-20
 
 ---
 
-## ✅ 완료된 작업
+## 스프린트 상태
 
-### 1. 프로젝트 구조 생성 (30분) ✅
-- [x] 디렉토리 구조 생성
-  - `app/api/routers/`
-  - `app/api/models/`
-  - `src/database/`
-  - `src/notifications/`
-  - `tests/unit/`, `tests/integration/`
-  - `alembic/versions/`
-
-### 2. FastAPI 기본 구조 생성 (1시간) ✅
-- [x] `app/api/main.py` - FastAPI 앱 초기화
-- [x] `app/api/routers/` - 모든 라우터 기본 구조
-  - [x] `auth.py` - 인증 API (스켈레톤)
-  - [x] `cameras.py` - 카메라 관리 API (스켈레톤)
-  - [x] `events.py` - 이벤트 API (스켈레톤)
-  - [x] `stats.py` - 통계 API (스켈레톤)
-  - [x] `stream.py` - WebSocket 스트리밍 (스켈레톤)
-- [x] CORS 설정
-- [x] 헬스체크 엔드포인트
-- [x] Swagger UI 자동 생성 준비
-
-### 3. 데이터베이스 스키마 설계 (2시간) ✅
-- [x] SQLAlchemy 모델 정의
-  - [x] `User` - 사용자
-  - [x] `Camera` - 카메라
-  - [x] `Event` - 이벤트
-  - [x] `DailyStatistics` - 일별 통계
-  - [x] `CameraAccess` - 카메라 접근 권한
-  - [x] `NotificationRule` - 알림 규칙
-- [x] `src/database/db.py` - DB 연결 관리
-- [x] `requirements.txt` 업데이트 (SQLAlchemy, FastAPI 등 추가)
+| 스프린트 | 범위 | 상태 |
+|----------|------|------|
+| Sprint 1 | 프로젝트 구조, DB 스키마, FastAPI 기본, 인증, API 라우터 | 완료 |
+| Sprint 2 | 멀티카메라 파이프라인, 더미 모델, API-Pipeline 통합, 알림, Docker, React UI 통합 | 완료 |
+| Sprint 3 | E2E 테스트 자동화, WebSocket 실시간, GPU Docker | 계획 중 |
 
 ---
 
-## 🚧 진행 중 / 다음 작업
+## 완료된 작업 (Sprint 1-2)
 
-### 4. Alembic 마이그레이션 설정 (30분)
-- [ ] `alembic.ini` 생성
-- [ ] Alembic 설정
-- [ ] 초기 마이그레이션 생성
-- [ ] 마이그레이션 테스트
+### 백엔드 — FastAPI + DB
+- [x] FastAPI 앱 구조 (main.py, lifespan, routers)
+- [x] SQLAlchemy ORM 모델 (User, Camera, Event, DailyStatistics, NotificationRule)
+- [x] Alembic 마이그레이션
+- [x] JWT 인증 (register, login, refresh, me)
+- [x] Camera CRUD + start/stop + pipeline-status
+- [x] Event 조회 (필터/페이징/확인)
+- [x] Stats summary
+- [x] Notification CRUD + 테스트 발송
+- [x] WebSocket 스트리밍 기본 구조
 
-### 5. EventLogger 확장 - 비동기 배치 저장 (2시간)
-- [ ] `AsyncEventLogger` 클래스 구현
-- [ ] 메모리 버퍼 (10개 또는 1초)
-- [ ] 백그라운드 스레드로 DB 저장
-- [ ] 기존 `EventLogger`와 통합
+### 파이프라인
+- [x] ResourcePool (스레드-안전 모델 공유)
+- [x] CameraPipeline (독립 처리 스레드)
+- [x] MultiCameraManager (생명주기 관리)
+- [x] AsyncEventLogger (배치 DB 저장)
+- [x] API ↔ MultiCameraManager 통합 (pipeline_state.py)
 
-### 6. ResourcePool 구현 (2시간)
-- [ ] VAD 모델 공유 관리
-- [ ] VLM 분석기 공유 관리
-- [ ] Agent Flow 공유 관리
-- [ ] 스레드 안전한 락 구현
-- [ ] GPU 메모리 추적
+### 더미 모델
+- [x] DummyVADModel, DummyVLMAnalyzer, DummyAgentFlow, DummyVideoSource
+- [x] 환경변수 제어 (PIPELINE_DUMMY, PIPELINE_DUMMY_VLM, PIPELINE_DUMMY_AGENT)
 
-### 7. MultiCameraManager 구현 (3시간)
-- [ ] E2ESystem 인스턴스 관리
-- [ ] ResourcePool 통합
-- [ ] 카메라 추가/삭제/수정
-- [ ] 상태 관리
-- [ ] 에러 핸들링
+### 알림 시스템
+- [x] NotificationChannel (base), ConsoleChannel, WebhookChannel, EmailChannel
+- [x] NotificationEngine (규칙, cooldown, 중복 방지)
 
----
+### Docker
+- [x] Dockerfile + docker-compose.yml
+- [x] .dockerignore, .env.example
 
-## 📝 생성된 파일
+### React UI
+- [x] JWT API 클라이언트 (자동 토큰 갱신)
+- [x] AuthContext + LoginPage
+- [x] LiveCameraGrid (실제 API 연동, start/stop)
+- [x] StatsDashboard (실제 API 연동)
+- [x] Vite proxy 설정 (/api, /health, /ws)
 
-### API 서버
-- `app/api/__init__.py`
-- `app/api/main.py`
-- `app/api/routers/__init__.py`
-- `app/api/routers/auth.py`
-- `app/api/routers/cameras.py`
-- `app/api/routers/events.py`
-- `app/api/routers/stats.py`
-- `app/api/routers/stream.py`
-
-### 데이터베이스
-- `src/database/__init__.py`
-- `src/database/db.py`
-- `src/database/models.py`
-
-### 문서
-- `docs/DESIGN_DECISIONS.md` - 설계 결정 사항
-- `docs/IMPLEMENTATION_PLAN.md` - 구현 계획
-- `docs/PROGRESS.md` - 이 파일
+### 테스트
+- [x] API smoke: 18 tests
+- [x] Dummy pipeline: 7 tests
+- [x] Sprint 2 pipeline: 15 tests
+- [x] API-Pipeline integration: 6 tests
+- [x] Notifications: 12 tests
+- [x] **총 58 tests PASSED**
 
 ---
 
-## 🧪 테스트 필요 사항
+## 남은 작업 후보
 
-### 즉시 테스트 가능
-1. FastAPI 서버 실행
-   ```bash
-   cd /Users/gimdongju/Documents/workspace/secu/AI_CCTV_final
-   python -m app.api.main
-   # 또는
-   uvicorn app.api.main:app --reload
-   ```
-2. Swagger UI 확인: http://localhost:8000/docs
+### E2E 테스트 자동화
+- Docker compose 기반 통합 테스트
+- GitHub Actions CI/CD
 
-### 의존성 설치 필요
-```bash
-pip install -r requirements.txt
-```
+### Docker GPU 지원
+- nvidia-docker / CUDA runtime
+- GPU 스케줄링
 
----
+### WebSocket 실시간 이벤트 피드
+- 이벤트 발생 시 실시간 브로드캐스트
+- React UI 실시간 알림 토스트
 
-## ⚠️ 주의 사항
-
-1. **데이터베이스 연결**: PostgreSQL이 실행 중이어야 함
-2. **환경 변수**: `DATABASE_URL` 설정 필요
-3. **의존성**: SQLAlchemy, FastAPI 등 설치 필요
-
----
-
-## 📊 진행률
-
-- **완료**: 3/10 작업 (30%)
-- **예상 남은 시간**: 7.5시간
-- **다음 마일스톤**: Alembic 마이그레이션 설정
-
----
-
-**다음 단계**: Alembic 마이그레이션 설정 및 EventLogger 확장 작업 시작
+### 실제 모델 통합
+- VAD 모델 가중치 연결 (MNAD 등)
+- VLM 모델 배포 (Qwen2.5-VL)
+- Agent LLM 서빙 (Qwen3-8B / API)

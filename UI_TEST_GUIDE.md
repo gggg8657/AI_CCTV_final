@@ -1,69 +1,55 @@
-# UI 테스트 가이드 (모델 없이)
+# UI 테스트 가이드
 
-## 준비 사항
+## 준비
 
-1. **의존성 설치**
 ```bash
-pip install streamlit fastapi uvicorn
+conda activate agent
+pip install -r requirements.txt
+cd ui && npm install && cd ..
 ```
 
-2. **Config 설정**
-- Agent 비활성화: `config['agent']['enabled'] = False`
-- 이미 `configs/config.yaml.backup`으로 백업됨
+## 방법 1: 더미 모드 (모델 없이 전체 동작)
 
-## 실행 방법
-
-### 방법 1: 자동 스크립트 사용
 ```bash
-./run_ui.sh
-```
+# 백엔드
+PIPELINE_DUMMY=true uvicorn app.api.main:app --port 8000
 
-### 방법 2: 수동 실행
-
-#### Streamlit Web UI
-```bash
-streamlit run app/web_ui.py
-```
-- URL: http://localhost:8501
-- 특징: 간단한 웹 인터페이스
-
-#### FastAPI Backend
-```bash
-uvicorn app.api.main:app --reload --host 0.0.0.0 --port 8000
-```
-- URL: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-
-#### React Frontend
-```bash
+# React UI (별도 터미널)
 cd ui
-npm install  # 처음 한 번만
 npm run dev
 ```
-- URL: http://localhost:5173
-- FastAPI와 함께 실행 필요
 
-#### CLI UI
+- React UI: http://localhost:3000
+- Swagger UI: http://localhost:8000/docs
+- Health: http://localhost:8000/health
+
+## 방법 2: Docker
+
 ```bash
-python app/cli_ui.py
+docker compose up --build
 ```
+
+- API: http://localhost:8000
+- Swagger: http://localhost:8000/docs
 
 ## 확인 가능한 기능
 
-✅ **모델 없이 확인 가능:**
-- UI 구조 및 레이아웃
-- API 엔드포인트
-- 이벤트 버스 동작
-- Function Registry
-- 기본 통계 표시
+**모델 없이 확인 가능 (더미 모드):**
+- 회원가입 / 로그인 (JWT)
+- 카메라 등록 / 시작 / 중지
+- 더미 이벤트 생성 및 조회
+- 통계 대시보드
+- 알림 규칙 설정 및 테스트
+- API 전체 엔드포인트 (Swagger)
 
-⚠️ **모델 필요:**
-- Agent 기능
-- VAD/VLM 분석
-- 실제 비디오 처리
+**실제 모델 필요:**
+- 실제 영상 기반 VAD 이상 탐지
+- VLM 상황 분석
+- Agent 대응 계획 생성
 
-## Config 원복
+## 자동 테스트
 
 ```bash
-cp configs/config.yaml.backup configs/config.yaml
+PIPELINE_DUMMY=true python -m pytest tests/ -v
+# 58 tests 통과
 ```
