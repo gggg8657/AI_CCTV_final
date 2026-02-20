@@ -82,6 +82,10 @@ ui/dist/
 .DS_Store
 Thumbs.db
 
+# R
+.Rhistory
+.RData
+
 # Temporary files
 tmp/
 temp/

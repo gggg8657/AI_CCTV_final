@@ -1,80 +1,85 @@
 """
 카메라 관리 API 라우터
-====================
-
-카메라 CRUD, 시작/중지, 상태 조회
 """
 
-from fastapi import APIRouter, HTTPException, status
-from typing import List, Optional
-import sys
-from pathlib import Path
+from fastapi import APIRouter, HTTPException, status, Depends, Query
+from sqlalchemy.orm import Session
+from typing import Optional
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+from src.database.db import get_db
+from src.database.models import Camera, User
+from app.api.schemas import CameraCreate, CameraUpdate, CameraOut
+from app.api.dependencies import get_current_user
 
 router = APIRouter()
 
 
-@router.get("/")
-async def list_cameras():
-    """카메라 목록 조회"""
-    # TODO: 구현 예정
-    return {
-        "cameras": [],
-        "total": 0
-    }
+@router.get("/", response_model=list[CameraOut])
+def list_cameras(
+    status_filter: Optional[str] = Query(None, alias="status"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    q = db.query(Camera)
+    if status_filter:
+        q = q.filter(Camera.status == status_filter)
+    return q.order_by(Camera.id).all()
 
 
-@router.get("/{camera_id}")
-async def get_camera(camera_id: int):
-    """카메라 상세 조회"""
-    # TODO: 구현 예정
-    return {
-        "message": f"Camera {camera_id} detail - 구현 예정"
-    }
+@router.get("/{camera_id}", response_model=CameraOut)
+def get_camera(camera_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    cam = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    return cam
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_camera():
-    """카메라 생성"""
-    # TODO: 구현 예정
-    return {
-        "message": "Camera creation - 구현 예정"
-    }
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=CameraOut)
+def create_camera(body: CameraCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    cam = Camera(**body.model_dump(), created_by=user.id)
+    db.add(cam)
+    db.commit()
+    db.refresh(cam)
+    return cam
 
 
-@router.put("/{camera_id}")
-async def update_camera(camera_id: int):
-    """카메라 수정"""
-    # TODO: 구현 예정
-    return {
-        "message": f"Camera {camera_id} update - 구현 예정"
-    }
+@router.put("/{camera_id}", response_model=CameraOut)
+def update_camera(camera_id: int, body: CameraUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    cam = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(cam, field, value)
+    db.commit()
+    db.refresh(cam)
+    return cam
 
 
-@router.delete("/{camera_id}")
-async def delete_camera(camera_id: int):
-    """카메라 삭제"""
-    # TODO: 구현 예정
-    return {
-        "message": f"Camera {camera_id} deletion - 구현 예정"
-    }
+@router.delete("/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_camera(camera_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    cam = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    db.delete(cam)
+    db.commit()
 
 
 @router.post("/{camera_id}/start")
-async def start_camera(camera_id: int):
-    """카메라 시작"""
-    # TODO: 구현 예정
-    return {
-        "message": f"Camera {camera_id} start - 구현 예정"
-    }
+def start_camera(camera_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    cam = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    cam.status = "active"
+    db.commit()
+    return {"camera_id": camera_id, "status": "active"}
 
 
 @router.post("/{camera_id}/stop")
-async def stop_camera(camera_id: int):
-    """카메라 중지"""
-    # TODO: 구현 예정
-    return {
-        "message": f"Camera {camera_id} stop - 구현 예정"
-    }
+def stop_camera(camera_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    cam = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    cam.status = "inactive"
+    db.commit()
+    return {"camera_id": camera_id, "status": "inactive"}
