@@ -195,12 +195,11 @@ def run_cli(settings: dict):
 
 
 def run_web(settings: dict):
-    """Web UI 모드 실행"""
+    """Web UI 모드 실행 (FastAPI backend)"""
     import subprocess
-    
-    port = settings.get("web_port", 8501)
-    
-    # 환경 변수로 설정 전달
+
+    port = settings.get("web_port", 8000)
+
     env = os.environ.copy()
     env["E2E_SOURCE"] = settings.get("source_path", "")
     env["E2E_SOURCE_TYPE"] = settings.get("source_type", "file")
@@ -208,19 +207,18 @@ def run_web(settings: dict):
     env["E2E_THRESHOLD"] = str(settings.get("threshold", 0.5))
     env["E2E_GPU"] = str(settings.get("gpu_id", 2))
     env["CUDA_VISIBLE_DEVICES"] = str(settings.get("gpu_id", 2))
-    
-    web_ui_path = PROJECT_ROOT / "app" / "web_ui.py"
-    
-    print(f"Starting Web UI on port {port}...")
-    print(f"Access at: http://localhost:{port}")
+
+    print(f"Starting FastAPI backend on port {port}...")
+    print(f"API at: http://localhost:{port}")
+    print(f"React UI: cd ui && npm run dev")
     print("Press Ctrl+C to stop\n")
-    
+
     subprocess.run([
-        sys.executable, "-m", "streamlit", "run",
-        str(web_ui_path),
-        "--server.port", str(port),
-        "--server.address", "0.0.0.0",
-        "--server.headless", "true"
+        sys.executable, "-m", "uvicorn",
+        "app.api.main:app",
+        "--host", "0.0.0.0",
+        "--port", str(port),
+        "--reload",
     ], env=env)
 
 

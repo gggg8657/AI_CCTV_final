@@ -315,11 +315,9 @@ export function SettingsPanel() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>관리자 패스워드 변경</Label>
-                <Input type="password" placeholder="현재 패스워드" />
-                <Input type="password" placeholder="새 패스워드" />
-                <Input type="password" placeholder="새 패스워드 확인" />
-                <Button className="w-full">패스워드 변경</Button>
+                <p className="text-sm text-muted-foreground">
+                  패스워드 변경 기능은 현재 준비 중입니다. 향후 업데이트에서 지원될 예정입니다.
+                </p>
               </div>
             </CardContent>
           </Card>

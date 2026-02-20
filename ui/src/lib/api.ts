@@ -142,5 +142,24 @@ export const notifications = {
   test: () => request<any>("/notifications/test", { method: "POST" }),
 };
 
+// ── Stats ──
+export const stats = {
+  list: (params?: Record<string, any>) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return request<{ items: any[]; total: number }>(`/stats/${qs}`);
+  },
+  summary: (days = 7, cameraId?: number) => {
+    const p = new URLSearchParams({ days: String(days) });
+    if (cameraId !== undefined) p.set("camera_id", String(cameraId));
+    return request<{
+      period_days: number;
+      total_events: number;
+      unacknowledged: number;
+      avg_vad_score: number;
+      vlm_type_distribution: Record<string, number>;
+    }>(`/stats/summary?${p}`);
+  },
+};
+
 // ── Health ──
 export const health = () => fetch("/health").then((r) => r.json());

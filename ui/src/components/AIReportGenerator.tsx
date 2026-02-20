@@ -6,18 +6,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Label } from "./ui/label";
 import { Checkbox } from "./ui/checkbox";
 import { Progress } from "./ui/progress";
-import { 
-  FileText, 
-  Download, 
-  Loader2, 
+import {
+  FileText,
+  Download,
+  Loader2,
   Calendar,
   Users,
-  Car,
   AlertTriangle,
   BarChart3,
   Clock,
-  CheckCircle
+  CheckCircle,
 } from "lucide-react";
+import { cameras, events, stats } from "../lib/api";
 
 interface ReportTemplate {
   id: string;
@@ -67,32 +67,6 @@ const reportTemplates: ReportTemplate[] = [
   }
 ];
 
-const mockReports: GeneratedReport[] = [
-  {
-    id: "1",
-    name: "일일 보안 현황 - 9월 24일",
-    type: "daily",
-    generatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    status: "completed",
-    downloadUrl: "#"
-  },
-  {
-    id: "2",
-    name: "주간 통계 분석 - 9월 3주차",
-    type: "weekly",
-    generatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    status: "completed",
-    downloadUrl: "#"
-  },
-  {
-    id: "3",
-    name: "비상출구 카메라 오류 분석",
-    type: "incident",
-    generatedAt: new Date(Date.now() - 30 * 60 * 1000),
-    status: "completed",
-    downloadUrl: "#"
-  }
-];
 
 export function AIReportGenerator() {
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -102,7 +76,7 @@ export function AIReportGenerator() {
   ]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
-  const [reports, setReports] = useState<GeneratedReport[]>(mockReports);
+  const [reports, setReports] = useState<GeneratedReport[]>([]);
 
   const reportSections = [
     { id: "summary", label: "전체 요약", description: "핵심 지표와 현황 개요" },
@@ -121,40 +95,76 @@ export function AIReportGenerator() {
     );
   };
 
-  const simulateReportGeneration = async () => {
+  const generateReport = async () => {
     setIsGenerating(true);
     setGenerationProgress(0);
 
-    // 진행률 시뮬레이션
-    const progressSteps = [15, 35, 60, 80, 95, 100];
-    const stepLabels = [
-      "데이터 수집 중...",
-      "AI 분석 진행 중...",
-      "패턴 분석 중...",
-      "보고서 작성 중...",
-      "검토 및 최적화 중...",
-      "완료!"
-    ];
+    const periodDays: Record<string, number> = { today: 1, yesterday: 1, week: 7, month: 30, custom: 7 };
+    const days = periodDays[selectedPeriod] ?? 7;
 
-    for (let i = 0; i < progressSteps.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setGenerationProgress(progressSteps[i]);
+    try {
+      setGenerationProgress(20);
+      const [camList, evResult, summary] = await Promise.all([
+        cameras.list(),
+        events.list({ limit: "200" }),
+        stats.summary(days).catch(() => null),
+      ]);
+      setGenerationProgress(60);
+
+      const template = reportTemplates.find((t) => t.id === selectedTemplate);
+      const active = camList.filter((c) => c.status === "active").length;
+      const now = new Date();
+      let content = `# ${template?.name} — ${now.toLocaleDateString("ko-KR")}\n\n`;
+
+      if (selectedSections.includes("summary")) {
+        content += `## 전체 요약\n- 카메라: ${active}/${camList.length}대 활성\n- 총 이벤트: ${evResult.total}건\n`;
+        if (summary) content += `- 미확인: ${summary.unacknowledged}건\n- 평균 VAD: ${summary.avg_vad_score.toFixed(4)}\n`;
+        content += "\n";
+      }
+      if (selectedSections.includes("alerts") && evResult.items.length > 0) {
+        content += `## 이벤트 내역 (최근 ${Math.min(evResult.items.length, 10)}건)\n`;
+        evResult.items.slice(0, 10).forEach((ev) => {
+          const t = new Date(ev.timestamp).toLocaleString("ko-KR");
+          content += `- ${t} | 카메라#${ev.camera_id} | ${ev.vlm_type || "이상탐지"} | VAD ${ev.vad_score.toFixed(2)}\n`;
+        });
+        content += "\n";
+      }
+      if (selectedSections.includes("cameras")) {
+        content += `## 카메라 상태\n`;
+        camList.forEach((c) => {
+          content += `- ${c.name}: ${c.status === "active" ? "활성" : "비활성"} (${c.source_type})\n`;
+        });
+        content += "\n";
+      }
+      setGenerationProgress(90);
+
+      const blob = new Blob([content], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+
+      const newReport: GeneratedReport = {
+        id: Date.now().toString(),
+        name: `${template?.name} - ${now.toLocaleDateString("ko-KR")}`,
+        type: selectedTemplate,
+        generatedAt: now,
+        status: "completed",
+        downloadUrl: url,
+      };
+
+      setReports((prev) => [newReport, ...prev]);
+      setGenerationProgress(100);
+    } catch {
+      const failedReport: GeneratedReport = {
+        id: Date.now().toString(),
+        name: `보고서 생성 실패`,
+        type: selectedTemplate,
+        generatedAt: new Date(),
+        status: "failed",
+      };
+      setReports((prev) => [failedReport, ...prev]);
+    } finally {
+      setIsGenerating(false);
+      setGenerationProgress(0);
     }
-
-    // 새 보고서 추가
-    const template = reportTemplates.find(t => t.id === selectedTemplate);
-    const newReport: GeneratedReport = {
-      id: Date.now().toString(),
-      name: `${template?.name} - ${new Date().toLocaleDateString('ko-KR')}`,
-      type: selectedTemplate,
-      generatedAt: new Date(),
-      status: "completed",
-      downloadUrl: "#"
-    };
-
-    setReports(prev => [newReport, ...prev]);
-    setIsGenerating(false);
-    setGenerationProgress(0);
   };
 
   const getStatusColor = (status: string) => {
@@ -271,7 +281,7 @@ export function AIReportGenerator() {
           {/* 생성 버튼 */}
           <div className="space-y-3">
             <Button
-              onClick={simulateReportGeneration}
+              onClick={generateReport}
               disabled={!selectedTemplate || isGenerating}
               className="w-full"
             >
@@ -330,11 +340,13 @@ export function AIReportGenerator() {
                     {report.status === "completed" ? "완료" : 
                      report.status === "generating" ? "생성중" : "실패"}
                   </Badge>
-                  {report.status === "completed" && (
-                    <Button variant="outline" size="sm">
-                      <Download className="h-4 w-4 mr-1" />
-                      다운로드
-                    </Button>
+                  {report.status === "completed" && report.downloadUrl && (
+                    <a href={report.downloadUrl} download={`${report.name}.md`}>
+                      <Button variant="outline" size="sm">
+                        <Download className="h-4 w-4 mr-1" />
+                        다운로드
+                      </Button>
+                    </a>
                   )}
                 </div>
               </div>
