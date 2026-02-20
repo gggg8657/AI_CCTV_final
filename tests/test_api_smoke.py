@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key"
+os.environ["PIPELINE_DUMMY"] = "true"
 
 from fastapi.testclient import TestClient
 from app.api.main import app
@@ -24,6 +25,9 @@ _cached_token = None
 def setup_module():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    from app.api.pipeline_state import _manager, init_pipeline
+    if _manager is None:
+        init_pipeline()
 
 
 def _get_token() -> str:

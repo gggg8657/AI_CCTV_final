@@ -13,13 +13,16 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.api.routers import auth, cameras, events, stats, stream  # noqa: E402
 from src.database.db import init_db  # noqa: E402
+from app.api.pipeline_state import init_pipeline, shutdown_pipeline  # noqa: E402
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    print("API server started — DB initialised")
+    init_pipeline()
+    print("API server started — DB + Pipeline initialised")
     yield
+    shutdown_pipeline()
     print("Shutting down API server...")
 
 
@@ -52,7 +55,20 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "ai-cctv-api"}
+    from app.api.pipeline_state import get_pipeline_manager
+    try:
+        mgr = get_pipeline_manager()
+        return {
+            "status": "healthy",
+            "service": "ai-cctv-api",
+            "pipeline": {
+                "active_cameras": mgr.active_count,
+                "total_cameras": len(mgr.camera_ids),
+                "dummy_flags": mgr.resource_pool.dummy_flags,
+            },
+        }
+    except RuntimeError:
+        return {"status": "healthy", "service": "ai-cctv-api", "pipeline": "not initialised"}
 
 
 if __name__ == "__main__":
