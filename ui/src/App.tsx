@@ -17,6 +17,8 @@ import { StatsDashboard } from "./components/StatsDashboard";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { AIAgentPanel } from "./components/AIAgentPanel";
 import { PackageDetectionPanel } from "./components/PackageDetectionPanel";
+import { LoginPage } from "./components/LoginPage";
+import { useAuth } from "./context/AuthContext";
 import {
   Camera,
   BarChart3,
@@ -40,8 +42,21 @@ const menuItems = [
 ];
 
 export default function App() {
+  const { user, loading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState("live");
   const [activeAlerts] = useState(1);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
 
   const renderContent = () => {
     switch (activeTab) {
@@ -202,12 +217,13 @@ export default function App() {
                 <span>본사 빌딩</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>관리자: 김보안</span>
+                <span>{user.username} ({user.role})</span>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 className="w-full justify-start text-muted-foreground"
+                onClick={logout}
               >
                 <LogOut className="h-4 w-4 mr-2" />
                 로그아웃
