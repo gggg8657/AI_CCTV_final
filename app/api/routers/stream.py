@@ -2,58 +2,76 @@
 WebSocket 스트리밍 라우터
 =======================
 
-실시간 프레임 및 이벤트 스트리밍
+채널:
+- stream/{camera_id}  : 프레임 + VAD 점수 스트리밍
+- events              : 실시간 이상 이벤트 브로드캐스트
+- stats               : 주기적 통계 브로드캐스트
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import List
-import sys
-from pathlib import Path
+import asyncio
+import logging
+from typing import Optional
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from app.api.websocket.manager import ws_manager
 
 router = APIRouter()
-
-
-class ConnectionManager:
-    """WebSocket 연결 관리자"""
-    
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
-    
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-    
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-    
-    async def broadcast(self, message: dict):
-        """모든 연결된 클라이언트에 메시지 브로드캐스트"""
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except:
-                pass
-
-
-manager = ConnectionManager()
+logger = logging.getLogger(__name__)
 
 
 @router.websocket("/stream/{camera_id}")
-async def websocket_stream(websocket: WebSocket, camera_id: int):
-    """카메라 스트림 WebSocket"""
-    await manager.connect(websocket)
+async def websocket_camera_stream(websocket: WebSocket, camera_id: int):
+    channel = f"camera:{camera_id}"
+    await ws_manager.connect(websocket, channel)
     try:
         while True:
-            # TODO: 실제 스트리밍 로직 구현
             data = await websocket.receive_text()
-            # 클라이언트로부터 메시지 수신 처리
-            await websocket.send_json({
-                "type": "frame",
-                "camera_id": camera_id,
-                "message": "Streaming endpoint - 구현 예정"
-            })
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        ws_manager.disconnect(websocket, channel)
+
+
+@router.websocket("/events")
+async def websocket_events(websocket: WebSocket):
+    channel = "events"
+    await ws_manager.connect(websocket, channel)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, channel)
+
+
+@router.websocket("/stats")
+async def websocket_stats(websocket: WebSocket):
+    channel = "stats"
+    await ws_manager.connect(websocket, channel)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, channel)
+
+
+# ── Helper functions for pushing data from pipeline threads ──
+
+async def push_frame_update(camera_id: int, vad_score: float) -> None:
+    await ws_manager.broadcast(f"camera:{camera_id}", {
+        "type": "frame_update",
+        "camera_id": camera_id,
+        "vad_score": round(vad_score, 4),
+    })
+
+
+async def push_anomaly_event(event_data: dict) -> None:
+    await ws_manager.broadcast("events", {
+        "type": "anomaly",
+        **event_data,
+    })
+
+
+async def push_stats_update(stats: dict) -> None:
+    await ws_manager.broadcast("stats", {
+        "type": "stats_update",
+        **stats,
+    })
