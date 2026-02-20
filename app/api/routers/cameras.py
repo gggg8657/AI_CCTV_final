@@ -4,7 +4,7 @@
 
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import List, Optional
 
 from src.database.db import get_db
 from src.database.models import Camera, User
@@ -14,7 +14,7 @@ from app.api.dependencies import get_current_user
 router = APIRouter()
 
 
-@router.get("/", response_model=list[CameraOut])
+@router.get("/", response_model=List[CameraOut])
 def list_cameras(
     status_filter: Optional[str] = Query(None, alias="status"),
     db: Session = Depends(get_db),
