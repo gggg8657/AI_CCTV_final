@@ -14,12 +14,22 @@ VAD + VLM + Agent 통합 파이프라인
 
 from .engine import E2EEngine, EngineConfig
 from .clip_saver import ClipSaver
+from .resource_pool import ResourcePool
+from .camera_config import CameraConfig, CameraStatus, PipelineState
+from .camera_pipeline import CameraPipeline
+from .multi_camera_manager import MultiCameraManager
 
 
 __all__ = [
     'E2EEngine',
     'EngineConfig',
     'ClipSaver',
+    'ResourcePool',
+    'CameraConfig',
+    'CameraStatus',
+    'PipelineState',
+    'CameraPipeline',
+    'MultiCameraManager',
 ]
 
 

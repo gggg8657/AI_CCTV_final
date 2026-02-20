@@ -1,42 +1,76 @@
 """
 통계 API 라우터
-==============
-
-통계 조회, 트렌드 분석
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import Optional
-from datetime import date
-import sys
-from pathlib import Path
+from datetime import date, timedelta
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+from src.database.db import get_db
+from src.database.models import DailyStatistics, Event, User
+from app.api.schemas import DailyStatsOut
+from app.api.dependencies import get_current_user
 
 router = APIRouter()
 
 
 @router.get("/")
-async def get_stats(
+def get_stats(
     camera_id: Optional[int] = Query(None),
-    date: Optional[date] = Query(None),
-    period: str = Query("day", regex="^(day|week|month)$")
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    """통계 조회"""
-    # TODO: 구현 예정
+    q = db.query(DailyStatistics)
+    if camera_id is not None:
+        q = q.filter(DailyStatistics.camera_id == camera_id)
+    if start_date:
+        q = q.filter(DailyStatistics.date >= start_date)
+    if end_date:
+        q = q.filter(DailyStatistics.date <= end_date)
+
+    items = q.order_by(DailyStatistics.date.desc()).all()
     return {
-        "message": "Statistics endpoint - 구현 예정"
+        "items": [DailyStatsOut.model_validate(s).model_dump() for s in items],
+        "total": len(items),
     }
 
 
-@router.get("/trends")
-async def get_trends(
+@router.get("/summary")
+def get_summary(
     camera_id: Optional[int] = Query(None),
-    days: int = Query(7, ge=1, le=30)
+    days: int = Query(7, ge=1, le=365),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    """통계 트렌드"""
-    # TODO: 구현 예정
+    cutoff = date.today() - timedelta(days=days)
+
+    q = db.query(Event)
+    if camera_id is not None:
+        q = q.filter(Event.camera_id == camera_id)
+    q = q.filter(Event.timestamp >= cutoff.isoformat())
+
+    total_events = q.count()
+    unacked = q.filter(Event.acknowledged == False).count()  # noqa: E712
+
+    avg_score = db.query(func.avg(Event.vad_score)).filter(
+        Event.timestamp >= cutoff.isoformat()
+    ).scalar()
+
+    vlm_types = (
+        db.query(Event.vlm_type, func.count(Event.id))
+        .filter(Event.timestamp >= cutoff.isoformat(), Event.vlm_type.isnot(None))
+        .group_by(Event.vlm_type)
+        .all()
+    )
+
     return {
-        "message": "Trends endpoint - 구현 예정"
+        "period_days": days,
+        "total_events": total_events,
+        "unacknowledged": unacked,
+        "avg_vad_score": round(avg_score, 4) if avg_score else 0,
+        "vlm_type_distribution": {t: c for t, c in vlm_types},
     }

@@ -1,183 +1,168 @@
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, TrendingDown, Users, Car, AlertTriangle, Camera } from "lucide-react";
-
-const hourlyData = [
-  { hour: "09:00", people: 12, vehicles: 8 },
-  { hour: "10:00", people: 18, vehicles: 15 },
-  { hour: "11:00", people: 25, vehicles: 22 },
-  { hour: "12:00", people: 45, vehicles: 35 },
-  { hour: "13:00", people: 38, vehicles: 28 },
-  { hour: "14:00", people: 32, vehicles: 25 },
-  { hour: "15:00", people: 28, vehicles: 20 }
-];
-
-const weeklyAlerts = [
-  { day: "월", alerts: 3 },
-  { day: "화", alerts: 1 },
-  { day: "수", alerts: 4 },
-  { day: "목", alerts: 2 },
-  { day: "금", alerts: 5 },
-  { day: "토", alerts: 1 },
-  { day: "일", alerts: 2 }
-];
-
-const cameraStatus = [
-  { name: "온라인", value: 15, color: "#22c55e" },
-  { name: "오프라인", value: 1, color: "#ef4444" },
-  { name: "점검중", value: 2, color: "#f59e0b" }
-];
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { AlertTriangle, Camera, Activity, Shield, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { cameras, events, health as fetchHealth } from "../lib/api";
+import type { Camera as CameraType, Event } from "../lib/api";
 
 export function StatsDashboard() {
+  const [cams, setCams] = useState<CameraType[]>([]);
+  const [evts, setEvts] = useState<{ items: Event[]; total: number }>({ items: [], total: 0 });
+  const [healthData, setHealthData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      cameras.list().catch(() => []),
+      events.list({ limit: "50" }).catch(() => ({ items: [], total: 0 })),
+      fetchHealth().catch(() => null),
+    ]).then(([c, e, h]) => {
+      setCams(c);
+      setEvts(e);
+      setHealthData(h);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const activeCams = cams.filter((c) => c.status === "active").length;
+  const inactiveCams = cams.length - activeCams;
+  const unacked = evts.items.filter((e) => !e.acknowledged).length;
+
+  const cameraStatus = [
+    { name: "활성", value: activeCams, color: "#22c55e" },
+    { name: "비활성", value: inactiveCams, color: "#ef4444" },
+  ].filter((d) => d.value > 0);
+
+  const typeCounts: Record<string, number> = {};
+  evts.items.forEach((e) => {
+    const t = e.vlm_type || "unknown";
+    typeCounts[t] = (typeCounts[t] || 0) + 1;
+  });
+  const typeData = Object.entries(typeCounts).map(([name, value]) => ({ name, value }));
+  const TYPE_COLORS = ["#3b82f6", "#ef4444", "#f59e0b", "#8b5cf6", "#10b981", "#ec4899"];
+
+  const dummyFlags = healthData?.pipeline?.dummy_flags;
+
   return (
     <div className="space-y-6">
-      {/* 주요 지표 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">일일 방문자</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">248</div>
-            <p className="text-xs text-muted-foreground">
-              <TrendingUp className="h-3 w-3 inline mr-1 text-green-500" />
-              +12% 전일 대비
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">차량 출입</CardTitle>
-            <Car className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">156</div>
-            <p className="text-xs text-muted-foreground">
-              <TrendingDown className="h-3 w-3 inline mr-1 text-red-500" />
-              -3% 전일 대비
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">주간 알림</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">18</div>
-            <p className="text-xs text-muted-foreground">
-              <TrendingDown className="h-3 w-3 inline mr-1 text-green-500" />
-              -25% 전주 대비
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">활성 카메라</CardTitle>
+            <CardTitle className="text-sm font-medium">등록 카메라</CardTitle>
             <Camera className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">15/18</div>
+            <div className="text-2xl font-bold">{activeCams}/{cams.length}</div>
+            <p className="text-xs text-muted-foreground">활성 / 전체</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">총 이벤트</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{evts.total}</div>
+            <p className="text-xs text-muted-foreground">미확인 {unacked}건</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">시스템</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{healthData?.status === "healthy" ? "정상" : "점검"}</div>
+            <p className="text-xs text-muted-foreground">{healthData?.service}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">파이프라인</CardTitle>
+            <Shield className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {dummyFlags ? "Dummy" : "Real"}
+            </div>
             <p className="text-xs text-muted-foreground">
-              정상 운영 중
+              {dummyFlags && `VAD:${dummyFlags.vad ? "D" : "R"} VLM:${dummyFlags.vlm ? "D" : "R"} Agent:${dummyFlags.agent ? "D" : "R"}`}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* 차트 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 시간별 활동 */}
         <Card>
           <CardHeader>
-            <CardTitle>시간별 활동</CardTitle>
+            <CardTitle>카메라 상태</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={hourlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="hour" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="people" fill="#3b82f6" name="사람" />
-                <Bar dataKey="vehicles" fill="#10b981" name="차량" />
-              </BarChart>
-            </ResponsiveContainer>
+            {cameraStatus.length > 0 ? (
+              <div className="flex flex-col lg:flex-row items-center gap-8">
+                <div className="w-full lg:w-1/2">
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie data={cameraStatus} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                        {cameraStatus.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="w-full lg:w-1/2 space-y-4">
+                  {cameraStatus.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }} />
+                        <span className="text-sm">{s.name}</span>
+                      </div>
+                      <span className="text-sm font-medium">{s.value}대</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-8">카메라 데이터 없음</p>
+            )}
           </CardContent>
         </Card>
 
-        {/* 주간 알림 추이 */}
         <Card>
           <CardHeader>
-            <CardTitle>주간 알림 추이</CardTitle>
+            <CardTitle>이벤트 유형 분포</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={weeklyAlerts}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip />
-                <Line 
-                  type="monotone" 
-                  dataKey="alerts" 
-                  stroke="#ef4444" 
-                  strokeWidth={2}
-                  name="알림 수"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 카메라 상태 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>카메라 상태 분포</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col lg:flex-row items-center gap-8">
-            <div className="w-full lg:w-1/2">
+            {typeData.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie
-                    data={cameraStatus}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    {cameraStatus.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                  <Pie data={typeData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                    {typeData.map((_, i) => (
+                      <Cell key={i} fill={TYPE_COLORS[i % TYPE_COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
-            <div className="w-full lg:w-1/2 space-y-4">
-              {cameraStatus.map((status, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div 
-                      className="w-3 h-3 rounded-full" 
-                      style={{ backgroundColor: status.color }}
-                    />
-                    <span className="text-sm">{status.name}</span>
-                  </div>
-                  <span className="text-sm font-medium">{status.value}대</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            ) : (
+              <p className="text-center text-muted-foreground py-8">이벤트 데이터 없음</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
