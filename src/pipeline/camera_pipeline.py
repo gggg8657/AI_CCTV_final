@@ -82,13 +82,25 @@ class CameraPipeline:
             if self.status.state != PipelineState.ERROR:
                 self.status.state = PipelineState.IDLE
 
-    def _process_loop(self) -> None:
+    def _open_video_source(self):
+        """비디오 소스 열기 — dummy/file/rtsp 지원"""
+        if self.config.source_type == "dummy":
+            from ..dummy.video import DummyVideoSource
+            src = DummyVideoSource(total_frames=self.config.__dict__.get("total_frames", 0))
+            src.open()
+            return src
+
         if not HAS_CV2:
-            raise RuntimeError("OpenCV (cv2) is required for CameraPipeline")
+            raise RuntimeError("OpenCV (cv2) is required for non-dummy sources")
 
         cap = cv2.VideoCapture(self.config.source_path)
         if not cap.isOpened():
             raise RuntimeError(f"Cannot open source: {self.config.source_path}")
+        return cap
+
+    def _process_loop(self) -> None:
+        source = self._open_video_source()
+        is_cv2_cap = not hasattr(source, "get_info")
 
         self.status.state = PipelineState.RUNNING
         self.status.started_at = datetime.now()
@@ -103,9 +115,9 @@ class CameraPipeline:
             while not self._stop_event.is_set():
                 loop_start = time.time()
 
-                ret, frame = cap.read()
+                ret, frame = source.read()
                 if not ret:
-                    if self.config.source_type == "file":
+                    if self.config.source_type in ("file", "dummy"):
                         break
                     time.sleep(0.05)
                     continue
@@ -137,7 +149,10 @@ class CameraPipeline:
                 if elapsed < target:
                     time.sleep(target - elapsed)
         finally:
-            cap.release()
+            if is_cv2_cap:
+                source.release()
+            else:
+                source.close()
             logger.info("CameraPipeline %d stopped", self.config.camera_id)
 
     def _handle_anomaly(self, frame: Any, vad_score: float) -> None:
