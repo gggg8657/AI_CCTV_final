@@ -20,9 +20,23 @@ logger = logging.getLogger(__name__)
 class MultiCameraManager:
     """멀티 카메라 파이프라인 관리자"""
 
-    def __init__(self, max_cameras: int = 16, gpu_id: int = 0, use_dummy: bool = False):
+    def __init__(
+        self,
+        max_cameras: int = 16,
+        gpu_id: int = 0,
+        use_dummy: bool = False,
+        use_dummy_vad: Optional[bool] = None,
+        use_dummy_vlm: Optional[bool] = None,
+        use_dummy_agent: Optional[bool] = None,
+    ):
         self.max_cameras = max_cameras
-        self.resource_pool = ResourcePool(gpu_id=gpu_id, use_dummy=use_dummy)
+        self.resource_pool = ResourcePool(
+            gpu_id=gpu_id,
+            use_dummy=use_dummy,
+            use_dummy_vad=use_dummy_vad,
+            use_dummy_vlm=use_dummy_vlm,
+            use_dummy_agent=use_dummy_agent,
+        )
         self._pipelines: Dict[int, CameraPipeline] = {}
         self._lock = threading.Lock()
         self._on_anomaly: Optional[Callable] = None

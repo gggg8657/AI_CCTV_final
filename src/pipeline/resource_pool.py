@@ -5,8 +5,14 @@ ResourcePool — 모델 리소스 공유 풀
 VAD/VLM/Agent 모델을 카메라 파이프라인 간 공유하여 GPU 메모리 절약.
 Double-check locking 패턴으로 스레드 안전 보장.
 
-use_dummy=True 이면 실제 모델 대신 Dummy 구현을 사용하여
-모델 파일 없이도 전체 파이프라인을 실행할 수 있음.
+컴포넌트별 더미 제어:
+- use_dummy_vad / use_dummy_vlm / use_dummy_agent 로 개별 설정
+- use_dummy=True 이면 세 개 모두 더미 (하위 호환)
+
+서버(GPU 있음): ResourcePool(use_dummy_vlm=True, use_dummy_agent=True)
+  → VAD는 실제 모델, VLM/Agent는 더미
+로컬(모델 없음): ResourcePool(use_dummy=True)
+  → 전부 더미
 """
 
 import logging
@@ -25,19 +31,32 @@ except ImportError:
 class ResourcePool:
     """스레드 안전한 모델 리소스 풀"""
 
-    def __init__(self, gpu_id: int = 0, use_dummy: bool = False):
+    def __init__(
+        self,
+        gpu_id: int = 0,
+        use_dummy: bool = False,
+        use_dummy_vad: Optional[bool] = None,
+        use_dummy_vlm: Optional[bool] = None,
+        use_dummy_agent: Optional[bool] = None,
+    ):
         self.gpu_id = gpu_id
-        self.use_dummy = use_dummy
+        self._dummy_vad = use_dummy_vad if use_dummy_vad is not None else use_dummy
+        self._dummy_vlm = use_dummy_vlm if use_dummy_vlm is not None else use_dummy
+        self._dummy_agent = use_dummy_agent if use_dummy_agent is not None else use_dummy
         self._vad_models: Dict[str, Any] = {}
         self._vlm_analyzer: Optional[Any] = None
         self._agent_flows: Dict[str, Any] = {}
         self._lock = threading.RLock()
         self._closed = False
 
+    @property
+    def dummy_flags(self) -> Dict[str, bool]:
+        return {"vad": self._dummy_vad, "vlm": self._dummy_vlm, "agent": self._dummy_agent}
+
     # ── VAD ──
 
     def get_vad_model(self, model_type: str) -> Any:
-        key = model_type if not self.use_dummy else f"dummy:{model_type}"
+        key = model_type if not self._dummy_vad else f"dummy:{model_type}"
         if key in self._vad_models:
             return self._vad_models[key]
         with self._lock:
@@ -46,7 +65,7 @@ class ResourcePool:
             return self._vad_models[key]
 
     def _create_vad_model(self, model_type: str) -> Any:
-        if self.use_dummy:
+        if self._dummy_vad:
             from ..dummy.vad import DummyVADModel
             model = DummyVADModel()
             model.initialize("cpu")
@@ -72,7 +91,7 @@ class ResourcePool:
             return self._vlm_analyzer
 
     def _create_vlm_analyzer(self, **kwargs: Any) -> Any:
-        if self.use_dummy:
+        if self._dummy_vlm:
             from ..dummy.vlm import DummyVLMAnalyzer
             analyzer = DummyVLMAnalyzer(**kwargs)
             analyzer.initialize()
@@ -94,7 +113,7 @@ class ResourcePool:
     # ── Agent ──
 
     def get_agent_flow(self, flow_type: str, **kwargs: Any) -> Any:
-        key = flow_type if not self.use_dummy else f"dummy:{flow_type}"
+        key = flow_type if not self._dummy_agent else f"dummy:{flow_type}"
         if key in self._agent_flows:
             return self._agent_flows[key]
         with self._lock:
@@ -103,7 +122,7 @@ class ResourcePool:
             return self._agent_flows[key]
 
     def _create_agent_flow(self, flow_type: str, **kwargs: Any) -> Any:
-        if self.use_dummy:
+        if self._dummy_agent:
             from ..dummy.agent import DummyAgentFlow
             flow = DummyAgentFlow(flow_type=flow_type)
             flow.initialize()

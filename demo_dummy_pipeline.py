@@ -4,17 +4,13 @@ Dummy Pipeline Demo — 모델 파일 없이 전체 파이프라인 동작 확�
 ==============================================================
 
 실행:
-    python3 demo_dummy_pipeline.py
+    python3 demo_dummy_pipeline.py              # 로컬: 전부 더미
+    python3 demo_dummy_pipeline.py --server     # 서버: VAD 실제, VLM/Agent 더미
 
-모든 컴포넌트가 더미로 동작합니다:
-- DummyVAD: 주기적 이상 점수 스파이크 생성
-- DummyVLM: 랜덤 이상 유형 분류
-- DummyAgent: 시나리오별 대응 액션 생성
-- DummyVideoSource: 합성 컬러 프레임 생성
-
-실제 모델로 교체하려면:
-    ResourcePool(gpu_id=0, use_dummy=False)
-    CameraConfig(source_type="rtsp", source_path="rtsp://...")
+컴포넌트별 더미 제어:
+- 로컬 (모델 없음): use_dummy=True → 전부 더미
+- 서버 (VAD만 있음): use_dummy_vlm=True, use_dummy_agent=True → VAD만 실제
+- 서버 (전부 있음): 기본값 → 전부 실제
 """
 
 import sys
@@ -51,9 +47,20 @@ def on_frame(camera_id: int, frame, score: float) -> None:
 
 
 def main() -> None:
-    logger.info("=== Dummy Pipeline Demo ===")
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--server", action="store_true", help="서버 모드: VAD 실제, VLM/Agent 더미")
+    args = parser.parse_args()
 
-    mgr = MultiCameraManager(max_cameras=4, gpu_id=0, use_dummy=True)
+    if args.server:
+        logger.info("=== Server Mode: real VAD, dummy VLM/Agent ===")
+        mgr = MultiCameraManager(
+            max_cameras=4, gpu_id=0,
+            use_dummy_vlm=True, use_dummy_agent=True,
+        )
+    else:
+        logger.info("=== Local Mode: all dummy ===")
+        mgr = MultiCameraManager(max_cameras=4, gpu_id=0, use_dummy=True)
     mgr.set_anomaly_callback(on_anomaly)
     mgr.set_frame_callback(on_frame)
 
