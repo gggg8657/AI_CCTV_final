@@ -65,6 +65,8 @@ datasets/
 # Database
 *.db
 *.sqlite
+*.db-wal
+*.db-shm
 
 # Node
 node_modules/
